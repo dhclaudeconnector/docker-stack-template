@@ -4,6 +4,8 @@ credentials-file: /etc/cloudflared/credentials.json
 ingress:
   - hostname: main.dockerstack.dpdns.org
     service: http://caddy:80
+  - hostname: dockerstack.dpdns.org
+    service: http://caddy:80
   - hostname: ttyd.dockerstack.dpdns.org
     service: http://caddy:80
   - hostname: dozzle.dockerstack.dpdns.org

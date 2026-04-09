@@ -1,0 +1,73 @@
+# VS Code REST Client requests for this project
+# Extension: REST Client (humao.rest-client)
+#
+# This file reads values from the local .env via {{$dotenv VAR_NAME}}.
+# If you need a Basic Auth token for Caddy / public domain requests:
+# PowerShell:
+# [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:YOUR_PASSWORD"))
+
+@project_name = {{$dotenv PROJECT_NAME}}
+@domain = {{$dotenv DOMAIN}}
+@app_port = {{$dotenv APP_PORT}}
+@app_host_port = {{$dotenv APP_HOST_PORT}}
+@health_path = {{$dotenv HEALTH_PATH}}
+@caddy_auth_user = {{$dotenv CADDY_AUTH_USER}}
+
+@app_local = http://localhost:{{app_host_port}}
+@caddy_local = http://localhost
+@host_main = main.{{domain}}
+@host_project = {{project_name}}.{{domain}}
+@public_main = https://{{host_main}}
+@public_project = https://{{host_project}}
+@basic_auth = REPLACE_WITH_BASE64_OF_ADMIN_COLON_PASSWORD
+
+###
+# Direct app access on the published local port
+GET {{app_local}}/
+Accept: application/json
+
+###
+GET {{app_local}}{{health_path}}
+Accept: application/json
+
+###
+GET {{app_local}}/logs/tail
+Accept: application/json
+
+###
+# Through local Caddy using the main public hostname
+# Expect 401 if @basic_auth is still the placeholder
+GET {{caddy_local}}/
+Host: {{host_main}}
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+GET {{caddy_local}}{{health_path}}
+Host: {{host_main}}
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+# Through local Caddy using the project hostname alias
+GET {{caddy_local}}/
+Host: {{host_project}}
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+# Public domain through Cloudflare Tunnel
+GET {{public_main}}/
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+GET {{public_main}}{{health_path}}
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+# Public project hostname alias
+GET {{public_project}}/
+Accept: application/json
+Authorization: Basic {{basic_auth}}
