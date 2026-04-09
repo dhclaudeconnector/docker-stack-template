@@ -1,0 +1,59 @@
+# ================================================================
+#  compose.access.yml — Network Access Layer
+#  Tailscale VPN — private mesh for internal team access
+#
+#  Profiles:
+#    tailscale-linux   — kernel TUN mode (full features, Linux host)
+#    tailscale-windows — userspace mode (Windows/WSL2 host)
+#
+#  Required env (when ENABLE_TAILSCALE=true):
+#    TS_AUTHKEY, TS_TAGS (optional, default: tag:container)
+# ================================================================
+
+networks:
+  app_net:
+    name: ${STACK_NAME:-mystack}_net
+    external: true
+
+volumes:
+  tailscale_data:
+
+services:
+  # ── Tailscale: Linux kernel mode (NET_ADMIN + TUN) ─────────────
+  tailscale-linux:
+    profiles: [tailscale-linux]
+    image: tailscale/tailscale:stable
+    hostname: ${STACK_NAME:-mystack}
+    environment:
+      TS_AUTHKEY: "${TS_AUTHKEY}"
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: >-
+        --advertise-tags=${TS_TAGS:-tag:container}
+        --accept-dns=true
+        --accept-routes
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    network_mode: host
+    restart: unless-stopped
+
+  # ── Tailscale: Windows/WSL2 userspace mode ─────────────────────
+  tailscale-windows:
+    profiles: [tailscale-windows]
+    image: tailscale/tailscale:stable
+    hostname: ${STACK_NAME:-mystack}
+    environment:
+      TS_AUTHKEY: "${TS_AUTHKEY}"
+      TS_USERSPACE: "true"
+      TS_EXTRA_ARGS: >-
+        --advertise-tags=${TS_TAGS:-tag:container}
+        --accept-dns=true
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+    networks: [app_net]
+    restart: unless-stopped

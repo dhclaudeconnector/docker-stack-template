@@ -1,0 +1,104 @@
+# ================================================================
+#  compose.ops.yml — Operational Tools
+#  Feature-flagged via ENABLE_* env vars → dc.sh sets --profile
+#
+#  Profiles:
+#    dozzle         — real-time container log viewer
+#    filebrowser    — web file manager (mounts ./logs)
+#    webssh-linux   — browser SSH terminal (Linux runner)
+#    webssh-windows — socat bridge to host ttyd (Windows runner)
+#
+#  Subdomain convention (auto-generated, no manual config):
+#    logs.${PROJECT_NAME}.${DOMAIN}
+#    files.${PROJECT_NAME}.${DOMAIN}
+#    ttyd.${PROJECT_NAME}.${DOMAIN}
+# ================================================================
+
+networks:
+  app_net:
+    name: ${STACK_NAME:-mystack}_net
+    external: true
+
+volumes:
+  filebrowser_data:
+
+services:
+  # ── Dozzle: real-time container logs ──────────────────────────
+  dozzle:
+    profiles: [dozzle]
+    image: amir20/dozzle:v8.x
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_NO_ANALYTICS: "true"
+    labels:
+      - "caddy=http://logs.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 8080}}"
+      - "caddy.basic_auth=/*"
+      - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── Filebrowser: browse and download log files ─────────────────
+  filebrowser:
+    profiles: [filebrowser]
+    image: filebrowser/filebrowser:v2.30.0
+    command: --noauth --port 80 --root /srv --database /database/filebrowser.db
+    volumes:
+      - ./logs:/srv:ro
+      - filebrowser_data:/database
+    labels:
+      - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 80}}"
+      - "caddy.basic_auth=/*"
+      - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── WebSSH (Linux): ttyd container → SSH into host runner ──────
+  webssh:
+    profiles: [webssh-linux]
+    build: ./services/webssh
+    command:
+      - "ttyd"
+      - "-W"
+      - "ssh"
+      - "-i"
+      - "/root/.ssh/id_rsa"
+      - "-o"
+      - "StrictHostKeyChecking=no"
+      - "-o"
+      - "UserKnownHostsFile=/dev/null"
+      - "-o"
+      - "ConnectTimeout=10"
+      - "-t"
+      - "${CUR_WHOAMI:-runner}@host.docker.internal"
+      - "cd ${CUR_WORK_DIR:-/home/runner} && exec ${SHELL:-/bin/bash}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./services/webssh/.ssh:/root/.ssh:ro
+    labels:
+      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 7681}}"
+      - "caddy.basic_auth=/*"
+      - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
+    networks: [app_net]
+    restart: unless-stopped
+
+  # ── WebSSH (Windows): socat bridge → host ttyd process ─────────
+  webssh-windows:
+    profiles: [webssh-windows]
+    image: alpine/socat:latest
+    command: >
+      TCP-LISTEN:7681,fork,reuseaddr
+      TCP:host.docker.internal:7681
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    labels:
+      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 7681}}"
+      - "caddy.basic_auth=/*"
+      - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
+    networks: [app_net]
+    restart: unless-stopped

@@ -1,0 +1,42 @@
+# ================================================================
+#  cloudflared/config.yml.example
+#  Template for Cloudflare Tunnel ingress config.
+#
+#  To auto-generate from .env:
+#    npm run gen:cf-config
+#
+#  To create manually:
+#    1. Copy this file to cloudflared/config.yml
+#    2. Fill in TUNNEL_ID (from: cloudflared tunnel list)
+#    3. Update hostnames to match your PROJECT_NAME + DOMAIN
+#    4. Add matching DNS records in Cloudflare dashboard
+# ================================================================
+
+# Get from: cloudflared tunnel list  OR  Cloudflare Zero Trust dashboard
+tunnel: <YOUR-TUNNEL-ID>
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # ── Main application ────────────────────────────────────────────
+  # Subdomain: ${PROJECT_NAME}.${DOMAIN}
+  - hostname: myapp.example.com
+    service: http://caddy:80
+
+  # ── Dozzle: real-time log viewer ───────────────────────────────
+  # Enabled when ENABLE_DOZZLE=true
+  - hostname: logs.myapp.example.com
+    service: http://caddy:80
+
+  # ── Filebrowser: log file manager ─────────────────────────────
+  # Enabled when ENABLE_FILEBROWSER=true
+  - hostname: files.myapp.example.com
+    service: http://caddy:80
+
+  # ── WebSSH: browser terminal ──────────────────────────────────
+  # Enabled when ENABLE_WEBSSH=true
+  # ⚠️  Protect with Cloudflare Access or Tailscale for production!
+  - hostname: ttyd.myapp.example.com
+    service: http://caddy:80
+
+  # ── Catch-all: return 404 for any unlisted hostnames ──────────
+  - service: http_status:404

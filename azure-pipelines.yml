@@ -1,0 +1,75 @@
+# Path: azure-pipelines.yml
+# Azure Pipelines equivalent of .github/workflows/deploy.yml
+# Uses dc.sh for OS-aware compose orchestration.
+
+trigger: none
+pr: none
+
+pool:
+  # ✅ Switch here: ubuntu-latest | windows-latest
+  vmImage: "ubuntu-latest"
+
+steps:
+  - checkout: self
+    displayName: Checkout
+
+  - bash: bash .github/scripts/pull-env.sh
+    displayName: Pull .env & credentials from RTDB
+    env:
+      RTDB_URL: $(RTDB_URL)
+
+  - bash: bash .github/scripts/detect-os.sh
+    displayName: Detect OS environment
+
+  - bash: node scripts/validate-env.js
+    displayName: Validate env
+
+  - bash: bash .github/scripts/setup-linux.sh
+    displayName: Setup environment (Linux)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'linux'))
+
+  - pwsh: .github/scripts/setup-windows.ps1
+    displayName: Setup environment (Windows)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'windows'))
+
+  - bash: bash dc.sh up -d --build --remove-orphans
+    displayName: Build & start services (Linux)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'linux'))
+
+  - pwsh: |
+      $wsl = $env:WSL_WORKSPACE
+      wsl -d Ubuntu -- bash -c "cd '$wsl' && bash dc.sh up -d --build --remove-orphans"
+    displayName: Build & start services (Windows/WSL2)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'windows'))
+
+  - bash: docker image prune -f
+    displayName: Clean up unused images (Linux)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'linux'))
+
+  - pwsh: |
+      $wsl = $env:WSL_WORKSPACE
+      wsl -d Ubuntu -- bash -c "cd '$wsl' && sudo docker image prune -f"
+    displayName: Clean up unused images (Windows/WSL2)
+    condition: and(succeeded(), eq(variables['CUR_OS'], 'windows'))
+
+  - bash: dotenvrtdb runner keepalive
+    displayName: dotenvrtdb runner keepalive
+
+  - bash: bash .github/scripts/collect-artifacts.sh
+    displayName: Collect docker runtime artifacts (Linux)
+    condition: and(always(), eq(variables['CUR_OS'], 'linux'))
+
+  - pwsh: |
+      $wsl = $env:WSL_WORKSPACE
+      if (-not $wsl) { Write-Host "WSL_WORKSPACE not set, skipping"; exit 0 }
+      wsl -d Ubuntu -- bash -c "cd '$wsl' && bash .github/scripts/collect-artifacts.sh"
+    displayName: Collect docker runtime artifacts (Windows/WSL2)
+    condition: and(always(), eq(variables['CUR_OS'], 'windows'))
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish docker runtime artifacts
+    condition: always()
+    inputs:
+      PathtoPublish: "$(Build.SourcesDirectory)/artifacts/docker-runtime"
+      ArtifactName: "docker-runtime"
+      publishLocation: "Container"

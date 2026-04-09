@@ -1,0 +1,49 @@
+# ================================================================
+#  compose.apps.yml — Application Layer
+#  Drop-in image deployment: change APP_IMAGE + APP_PORT only
+#
+#  Subdomain: ${PROJECT_NAME}.${DOMAIN}
+#
+#  Minimal required env:
+#    APP_IMAGE  — Docker image to run (e.g. gitea/gitea:1.21)
+#    APP_PORT   — Port app listens on inside container
+#    PROJECT_NAME, DOMAIN, CADDY_AUTH_USER, CADDY_AUTH_HASH
+# ================================================================
+
+networks:
+  app_net:
+    name: ${STACK_NAME:-mystack}_net
+    external: true
+
+services:
+  app:
+    image: "${APP_IMAGE:-node:20-alpine}"
+    environment:
+      NODE_ENV: "${NODE_ENV:-production}"
+      PORT: "${APP_PORT:-3000}"
+    volumes:
+      - ./logs/app:/app/logs
+    labels:
+      - "caddy=http://${PROJECT_NAME}.${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
+      - "caddy.basic_auth=/*"
+      - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
+    networks: [app_net]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - "CMD"
+        - "sh"
+        - "-c"
+        - "wget -qO- http://localhost:${APP_PORT:-3000}${HEALTH_PATH:-/health} || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+# ── To build a custom app instead of pulling an image: ───────────
+# Uncomment and adjust the block below, then remove "image:" above.
+#
+#   build:
+#     context: ./services/app
+#     dockerfile: Dockerfile

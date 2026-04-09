@@ -1,0 +1,42 @@
+{
+  "name": "docker-stack-template",
+  "version": "2.0.0",
+  "description": "Modular Docker Compose template — drop-in multi-service deployment",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "_comment_validate": "── Validation ────────────────────────────────────────",
+    "validate:env":     "node scripts/validate-env.js",
+    "validate:compose": "node scripts/validate-compose.js",
+    "validate:cf":      "node scripts/validate-cf.js",
+    "validate:ts":      "node scripts/validate-ts.js",
+    "validate":         "npm run validate:env && npm run validate:compose && npm run validate:cf && npm run validate:ts",
+
+    "_comment_generate": "── Generators ───────────────────────────────────────",
+    "gen:cf-config":    "node scripts/generate-cf-config.js",
+    "gen:caddy-hash":   "docker run --rm caddy:alpine caddy hash-password --plaintext",
+
+    "_comment_docker": "── Docker Compose Control ───────────────────────────",
+    "up":              "bash dc.sh up -d --build --remove-orphans",
+    "up:fresh":        "bash dc.sh down -v && bash dc.sh up -d --build --remove-orphans",
+    "down":            "bash dc.sh down",
+    "down:volumes":    "bash dc.sh down -v",
+    "restart":         "bash dc.sh restart",
+    "restart:app":     "bash dc.sh restart app",
+    "pull":            "bash dc.sh pull",
+    "ps":              "bash dc.sh ps",
+    "logs":            "bash dc.sh logs -f --tail=100",
+    "logs:app":        "bash dc.sh logs -f --tail=100 app",
+    "logs:caddy":      "bash dc.sh logs -f --tail=100 caddy",
+    "config":          "bash dc.sh config",
+    "prune":           "docker image prune -f",
+    "prune:all":       "docker system prune -af --volumes",
+
+    "_comment_health": "── Health Checks ─────────────────────────────────────",
+    "health":          "bash dc.sh ps && bash dc.sh logs --tail=20 --no-color",
+    "exec:app":        "bash dc.sh exec app sh",
+    "exec:caddy":      "bash dc.sh exec caddy sh"
+  }
+}

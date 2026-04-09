@@ -1,0 +1,54 @@
+# ================================================================
+#  compose.core.yml — Core Infrastructure
+#  Always included: reverse proxy (Caddy) + tunnel (Cloudflare)
+#
+#  Required env:
+#    STACK_NAME, DOMAIN, CADDY_EMAIL, CADDY_AUTH_USER,
+#    CADDY_AUTH_HASH, CF_TUNNEL_TOKEN (or credentials file)
+# ================================================================
+
+networks:
+  app_net:
+    name: ${STACK_NAME:-mystack}_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+services:
+  # ── Caddy: auto reverse proxy via Docker labels ────────────────
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2.9.1-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      CADDY_INGRESS_NETWORKS: ${STACK_NAME:-mystack}_net
+    labels:
+      caddy.email: "${CADDY_EMAIL}"
+      caddy.auto_https: "off"
+    networks: [app_net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Cloudflared: expose to Internet without opening ports ──────
+  cloudflared:
+    image: cloudflare/cloudflared:2025.1.0
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared-credentials.json:/etc/cloudflared/credentials.json:ro
+    networks: [app_net]
+    restart: unless-stopped
+    depends_on:
+      caddy:
+        condition: service_healthy
