@@ -1,3 +1,4 @@
+*credentials.json
 # ── Secrets (NEVER commit) ───────────────────────────────────────
 .env
 .env.local
