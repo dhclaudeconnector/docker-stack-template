@@ -43,7 +43,7 @@ services:
       - ./logs:/srv:ro
       - filebrowser_data:/database
     labels:
-      - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}, http://files.${DOMAIN}"
       - "caddy.reverse_proxy={{upstreams 80}}"
       - "caddy.basic_auth=/*"
       - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
@@ -74,7 +74,7 @@ services:
     volumes:
       - ./services/webssh/.ssh:/root/.ssh:ro
     labels:
-      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy=http://ttyd.${PROJECT_NAME}.${DOMAIN}, http://ttyd.${DOMAIN}"
       - "caddy.reverse_proxy={{upstreams 7681}}"
       - "caddy.basic_auth=/*"
       - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
