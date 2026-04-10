@@ -27,7 +27,7 @@ services:
     environment:
       DOZZLE_NO_ANALYTICS: "true"
     labels:
-      - "caddy=http://logs.${PROJECT_NAME}.${DOMAIN}"
+      - "caddy=http://logs.${PROJECT_NAME}.${DOMAIN}, http://logs.${DOMAIN}"
       - "caddy.reverse_proxy={{upstreams 8080}}"
       - "caddy.basic_auth=/*"
       - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
