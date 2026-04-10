@@ -10,6 +10,8 @@ ingress:
     service: http://caddy:80
   - hostname: dozzle.dockerstack.dpdns.org
     service: http://caddy:80
+  - hostname: logs.dockerstack.dpdns.org
+    service: http://caddy:80
   - hostname: files.dockerstack.dpdns.org
     service: http://caddy:80
   - service: http_status:404
