@@ -10,12 +10,16 @@ on:
   workflow_dispatch:
 
 env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   DOTENVRTDB_URL: ${{ secrets.DOTENVRTDB_URL }}
+  STOP_RUNNER_ID: "${{ github.run_id }}-${{ github.run_attempt }}"
 
 jobs:
   deploy:
     # ✅ Switch runner here: ubuntu-latest | windows-latest
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
 
     steps:
       - name: Checkout
