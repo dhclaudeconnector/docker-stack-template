@@ -78,11 +78,11 @@ jobs:
           $wsl = $env:WSL_WORKSPACE
           wsl -d Ubuntu -- bash -c "cd '$wsl' && sudo docker image prune -f"
 
-      - name: |
+      - name: dotenvrtdb runner keepalive
+        shell: bash
+        run: |
           dotenvrtdb -e .env -- dotenvrtdb runner set-stoprunnerid
           dotenvrtdb -e .env -- dotenvrtdb runner keepalive
-        shell: bash
-        run: dotenvrtdb -e .env -- dotenvrtdb runner keepalive
 
       # ── Step 7: Collect artifacts (always) ────────────────────
       - name: Collect docker runtime artifacts (Linux)
