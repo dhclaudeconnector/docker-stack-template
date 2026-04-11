@@ -14,6 +14,3 @@ dotenvrtdb -e .env --pull -eUrl="$DOTENVRTDB_URL" \
   --var=CLOUDFLARED_TUNNEL_CREDENTIALS_BASE64
 
 echo "✅ [pull-env] Done"
-
-dotenvrtdb -e .env -- dotenvrtdb runner set-stoprunnerid
-echo "✅ [runner set-stoprunnerid] Done"

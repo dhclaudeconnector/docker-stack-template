@@ -13,8 +13,6 @@ trigger:
 variables:
   STOP_RUNNER_ID: "$(Build.BuildId)-$(System.JobAttempt)"
   STOP_LISTENER_ENABLED: "true"
-  # DOTENVRTDB_URL and GITHUB_TOKEN should be set as secret pipeline variables
-  # in Azure DevOps → Pipelines → Edit → Variables
 
 pool:
   # ✅ Đổi ở đây để chọn runner: ubuntu-latest | windows-latest
@@ -26,13 +24,13 @@ steps:
 
   # ── Step 1: Pull .env + credentials from RTDB ─────────────
   - bash: bash .github/scripts/pull-env.sh
-    displayName: "Pull .env & credentials from RTDB"
-    env:
-      DOTENVRTDB_URL: $(DOTENVRTDB_URL)
-      GITHUB_TOKEN: $(GITHUB_TOKEN)
+    # displayName: "Pull .env & credentials from RTDB"
+    # env:
+    #   DOTENVRTDB_URL: $(DOTENVRTDB_URL)
+    #   GITHUB_TOKEN: $(GITHUB_TOKEN)
 
   # ── Step 2: Detect OS → append vars to .env ───────────────
-  - bash: bash .github/scripts/detect-os.sh
+  - bash: dotenvrtdb -e .env -- bash .github/scripts/detect-os.sh
     displayName: "Detect OS environment"
 
   # ── Step 3: OS-specific setup ─────────────────────────────
@@ -51,8 +49,10 @@ steps:
   - bash: docker image prune -f
     displayName: "Clean up unused images (Linux)"
 
-  - bash: dotenvrtdb -e .env -- dotenvrtdb runner keepalive
-    displayName: "dotenvrtdb runner keepalive"
+  - bash: |
+      dotenvrtdb -e .env -- dotenvrtdb runner set-stoprunnerid
+      dotenvrtdb -e .env -- dotenvrtdb runner keepalive
+    displayName: "dotenvrtdb runner keepalive + set-stoprunnerid"
     env:
       DOTENVRTDB_URL: $(DOTENVRTDB_URL)
 
