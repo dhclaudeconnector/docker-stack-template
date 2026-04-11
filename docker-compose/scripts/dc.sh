@@ -73,6 +73,7 @@ fi
 
 # Shared defaults derived from stack identity.
 export TAILSCALE_HTTPS_HOST="${TAILSCALE_HTTPS_HOST:-${STACK_NAME:-mystack}.tailnet.local}"
+export TAILSCALE_NODE_AUTHKEY="${TAILSCALE_NODE_AUTHKEY:-${TAILSCALE_AUTHKEY:-}}"
 
 # Normalize tags to comma-separated form without spaces.
 if [ -n "${TAILSCALE_TAGS:-}" ]; then

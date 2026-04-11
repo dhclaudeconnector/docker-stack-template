@@ -20,7 +20,7 @@ const crypto = require("crypto");
 //   TAILSCALE_KEEP_IP_INTERVAL_SEC=30
 //   STACK_NAME=<hostname to keep>
 //   TAILSCALE_TS_TAILNET=- (or TS_TAILNET)
-//   TAILSCALE_CLIENDID + TAILSCALE_AUTHKEY (OAuth client credentials)
+//   TAILSCALE_CLIENDID + TAILSCALE_AUTHKEY
 // ================================================================
 
 function toBool(value, fallback = false) {
@@ -195,13 +195,35 @@ function isLikelyFirebaseUrl(url) {
 
 function readStateFile(stateFilePath) {
   if (!fs.existsSync(stateFilePath)) return null;
-  return fs.readFileSync(stateFilePath);
+  try {
+    return fs.readFileSync(stateFilePath);
+  } catch (err) {
+    throw new Error(`cannot read state file ${stateFilePath}: ${err.message}`);
+  }
 }
 
-async function backupState({ firebaseUrl, stateFilePath, hostname, tailnet, modeLabel, lastHashRef }) {
+function looksLikeTailscaleState(buffer) {
+  if (!buffer || buffer.length < 3) return false;
+  const text = buffer.toString("utf-8");
+  if (!text || text[0] !== "{") return false;
+  return text.includes("_machinekey") || text.includes("_profiles") || text.includes("profile-");
+}
+
+async function backupState({
+  firebaseUrl,
+  stateFilePath,
+  hostname,
+  tailnet,
+  modeLabel,
+  lastHashRef,
+}) {
   const stateBuffer = readStateFile(stateFilePath);
   if (!stateBuffer || stateBuffer.length === 0) {
     console.log(`ℹ️  ${modeLabel}: state file not found yet: ${stateFilePath}`);
+    return false;
+  }
+  if (!looksLikeTailscaleState(stateBuffer)) {
+    console.log(`ℹ️  ${modeLabel}: state file looks incomplete (${stateBuffer.length} bytes), skip upload.`);
     return false;
   }
 
@@ -264,6 +286,10 @@ async function restoreState({ firebaseUrl, stateFilePath }) {
   const data = Buffer.from(base64, "base64");
   if (!data.length) {
     console.log("ℹ️  restore: decoded state is empty.");
+    return false;
+  }
+  if (!looksLikeTailscaleState(data)) {
+    console.log(`ℹ️  restore: backup state looks incomplete (${data.length} bytes), skipping restore.`);
     return false;
   }
 
@@ -435,4 +461,3 @@ run().catch((err) => {
   console.error(`❌  Unexpected error: ${err.message}`);
   process.exit(1);
 });
-
