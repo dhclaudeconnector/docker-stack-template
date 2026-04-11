@@ -22,7 +22,6 @@ services:
     image: lucaslorentz/caddy-docker-proxy:2.9.1-alpine
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - caddy_data:/data

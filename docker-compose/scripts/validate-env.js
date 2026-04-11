@@ -191,6 +191,17 @@ if (env.ENABLE_TAILSCALE === "true") {
       return null;
     },
   });
+  check("TAILSCALE_TAGS", {
+    required: false,
+    desc: "Comma-separated tags, e.g. tag:ci,tag:container",
+    validate: (v) => {
+      if (/\s/.test(v)) return "Must not contain spaces. Use format: tag:ci,tag:container";
+      if (!/^tag:[A-Za-z0-9][A-Za-z0-9_-]*(,tag:[A-Za-z0-9][A-Za-z0-9_-]*)*$/.test(v)) {
+        return "Invalid format. Use comma-separated tags: tag:ci,tag:container";
+      }
+      return null;
+    },
+  });
   ok.push(`TAILSCALE_HTTPS_HOST = ${resolveRefs(env.TAILSCALE_HTTPS_HOST || env.STACK_NAME || "mystack")}`);
 } else {
   ok.push("ENABLE_TAILSCALE = false  (Tailscale skipped)");

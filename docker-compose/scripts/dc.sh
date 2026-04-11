@@ -74,6 +74,12 @@ fi
 # Shared defaults derived from stack identity.
 export TAILSCALE_HTTPS_HOST="${TAILSCALE_HTTPS_HOST:-${STACK_NAME:-mystack}.tailnet.local}"
 
+# Normalize tags to comma-separated form without spaces.
+if [ -n "${TAILSCALE_TAGS:-}" ]; then
+  TAILSCALE_TAGS="$(printf '%s' "$TAILSCALE_TAGS" | tr -d '[:space:]')"
+  export TAILSCALE_TAGS
+fi
+
 should_render_tailscale_serve() {
   case "${1:-}" in
     ""|up|start|restart|create|run|config|pull)
@@ -86,9 +92,10 @@ should_render_tailscale_serve() {
 }
 
 render_tailscale_serve_config() {
-  local tailnet_domain app_port serve_dir serve_file
+  local tailnet_domain app_port serve_dir serve_file serve_hostname
   tailnet_domain="$(trim "${TAILSCALE_TAILNET_DOMAIN:-}")"
   app_port="$(trim "${APP_PORT:-3000}")"
+  serve_hostname="${STACK_NAME:-mystack}.${tailnet_domain}"
 
   if [ -z "$tailnet_domain" ] || [ "$tailnet_domain" = "-" ]; then
     echo "❌ ENABLE_TAILSCALE=true nhưng TAILSCALE_TAILNET_DOMAIN chưa có giá trị hợp lệ." >&2
@@ -112,10 +119,10 @@ render_tailscale_serve_config() {
     }
   },
   "Web": {
-    "${tailnet_domain}:443": {
+    "${serve_hostname}:443": {
       "Handlers": {
         "/": {
-          "Proxy": "http://127.0.0.1:${app_port}"
+          "Proxy": "http://127.0.0.1:80"
         }
       }
     }
@@ -124,7 +131,7 @@ render_tailscale_serve_config() {
 EOF
 
   if [ "${DC_VERBOSE:-0}" = "1" ]; then
-    echo "  TS_SERVE  : $serve_file (${tailnet_domain} -> 127.0.0.1:${app_port})"
+    echo "  TS_SERVE  : $serve_file (${serve_hostname} -> 127.0.0.1:80)"
   fi
 }
 

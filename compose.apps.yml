@@ -25,7 +25,7 @@ services:
       - ./logs/app:/app/logs
     labels:
       # Public HTTP sites behind Cloudflare Tunnel.
-      - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}"
+      - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}"
       - "caddy.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
       - "caddy.basic_auth=/*"
       - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
