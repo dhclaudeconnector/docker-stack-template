@@ -4,7 +4,7 @@
 #
 #  Profiles:
 #    dozzle         — real-time container log viewer
-#    filebrowser    — web file manager (mounts workspace/logs/tailscale_data)
+#    filebrowser    — web file manager (mounts workspace/logs/.tailsacle)
 #    webssh-linux   — browser SSH terminal (Linux runner)
 #    webssh-windows — socat bridge to host ttyd (Windows runner)
 #
@@ -43,7 +43,7 @@ services:
     volumes:
       - .:/srv/workspace # browse toàn bộ project
       - ./logs:/srv/logs:ro # hoặc nếu chỉ cần xem logs
-      - tailscale_data:/srv/tailscale:ro # dữ liệu /var/lib/tailscale
+      - tailscale_data:/srv/workspace/.tailsacle:ro # toàn bộ /var/lib/tailscale trong workspace
       - filebrowser_data:/database
     labels:
       - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}, http://files.${DOMAIN}"
