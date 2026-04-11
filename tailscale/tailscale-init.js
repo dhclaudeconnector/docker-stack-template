@@ -9,6 +9,7 @@
 //  Usage:
 //    node tailscale/tailscale-init.js .env
 //    node tailscale/tailscale-init.js .env --yes
+//    node tailscale/tailscale-init.js            # process.env mode
 //    node tailscale/tailscale-init.js --remove-hostname
 //    node tailscale/tailscale-init.js .env --remove-hostname --yes
 //
@@ -469,43 +470,57 @@ function printList(header, values) {
 async function main() {
   const args = process.argv.slice(2);
   const removeHostnameMode = args.includes("--remove-hostname");
-  const envPathArg = args.find((arg) => !arg.startsWith("-")) || ".env";
+  const envPathArg = args.find((arg) => !arg.startsWith("-")) || "";
   const autoYes = args.includes("--yes") || args.includes("-y");
 
-  const envPath = path.resolve(process.cwd(), envPathArg);
-  if (!fs.existsSync(envPath)) {
-    console.error(`❌  Env file not found: ${envPath}`);
-    process.exit(1);
-  }
+  const envLines = [];
+  const envMap = {};
+  let envPath = "";
+  let envPathDisplay = "(process.env only)";
+  let envEol = "\n";
+  let envHadTrailingNewline = false;
+  let hasEnvFile = false;
 
-  const rawEnv = fs.readFileSync(envPath, "utf-8");
-  const envEol = rawEnv.includes("\r\n") ? "\r\n" : "\n";
-  const envHadTrailingNewline = rawEnv.endsWith("\n");
-  const { lines: envLines, map: envMap } = parseEnv(rawEnv);
+  if (envPathArg) {
+    envPath = path.resolve(process.cwd(), envPathArg);
+    if (!fs.existsSync(envPath)) {
+      console.error(`❌  Env file not found: ${envPath}`);
+      process.exit(1);
+    }
+
+    const rawEnv = fs.readFileSync(envPath, "utf-8");
+    envEol = rawEnv.includes("\r\n") ? "\r\n" : "\n";
+    envHadTrailingNewline = rawEnv.endsWith("\n");
+
+    const parsedEnv = parseEnv(rawEnv);
+    envLines.push(...parsedEnv.lines);
+    Object.assign(envMap, parsedEnv.map);
+
+    envPathDisplay = envPath;
+    hasEnvFile = true;
+  }
 
   const warnings = [];
   const errors = [];
+  const inputValue = (key) => process.env[key] || getEnvValue(envMap, key);
 
-  const tailscaleAuthKey = process.env.TAILSCALE_AUTHKEY || getEnvValue(envMap, "TAILSCALE_AUTHKEY");
+  const tailscaleAuthKey = inputValue("TAILSCALE_AUTHKEY");
   const tailscaleClientId =
-    process.env.TAILSCALE_CLIENDID ||
-    getEnvValue(envMap, "TAILSCALE_CLIENDID") ||
-    process.env.TAILSCALE_CLIENTID ||
-    getEnvValue(envMap, "TAILSCALE_CLIENTID");
-  const tailnetFromNew =
-    process.env.TAILSCALE_TS_TAILNET || getEnvValue(envMap, "TAILSCALE_TS_TAILNET");
-  const tailnetFromLegacy = process.env.TS_TAILNET || getEnvValue(envMap, "TS_TAILNET");
+    inputValue("TAILSCALE_CLIENDID") ||
+    inputValue("TAILSCALE_CLIENTID");
+  const tailnetFromNew = inputValue("TAILSCALE_TS_TAILNET");
+  const tailnetFromLegacy = inputValue("TS_TAILNET");
   const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
-  const stackName = (process.env.STACK_NAME || getEnvValue(envMap, "STACK_NAME")).trim();
-  const existingTailnetDomainRaw = getEnvValue(envMap, "TAILSCALE_TAILNET_DOMAIN");
+  const stackName = inputValue("STACK_NAME").trim();
+  const existingTailnetDomainRaw = inputValue("TAILSCALE_TAILNET_DOMAIN");
   const existingTailnetDomain = normalizeTailnetDomain(existingTailnetDomainRaw);
-  const aclFilePathRaw = process.env.TAILSCALE_ACL_JSON_PATH || getEnvValue(envMap, "TAILSCALE_ACL_JSON_PATH");
+  const aclFilePathRaw = inputValue("TAILSCALE_ACL_JSON_PATH");
 
-  const requiredTagsRaw = parseCsv(getEnvValue(envMap, "TAILSCALE_TAGS"));
+  const requiredTagsRaw = parseCsv(inputValue("TAILSCALE_TAGS"));
   const requiredTags = uniqueStable(requiredTagsRaw.filter(isTag));
   const invalidTags = uniqueStable(requiredTagsRaw.filter((t) => !isTag(t)));
 
-  const defaultOwnersRaw = parseCsv(getEnvValue(envMap, "TAILSCALE_TAG_OWNERS") || "autogroup:admin");
+  const defaultOwnersRaw = parseCsv(inputValue("TAILSCALE_TAG_OWNERS") || "autogroup:admin");
   const defaultOwners = uniqueStable(defaultOwnersRaw.filter(Boolean));
 
   if (!tailscaleAuthKey) {
@@ -517,7 +532,7 @@ async function main() {
   if (!tailscaleClientId) {
     errors.push("Missing TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID).");
   }
-  if (getEnvValue(envMap, "TAILSCALE_CLIENTID") && !getEnvValue(envMap, "TAILSCALE_CLIENDID")) {
+  if (inputValue("TAILSCALE_CLIENTID") && !inputValue("TAILSCALE_CLIENDID")) {
     warnings.push("Using fallback TAILSCALE_CLIENTID. Recommended key for this project is TAILSCALE_CLIENDID.");
   }
   if (tailscaleClientId && !/^[A-Za-z0-9]+$/.test(tailscaleClientId)) {
@@ -534,7 +549,7 @@ async function main() {
 
   if (removeHostnameMode) {
     if (!stackName) {
-      errors.push("Missing STACK_NAME. --remove-hostname requires STACK_NAME in .env.");
+      errors.push("Missing STACK_NAME. --remove-hostname requires STACK_NAME in process.env or .env.");
     }
   } else {
     if (!requiredTags.length) {
@@ -553,7 +568,7 @@ async function main() {
   }
 
   console.log(`\n🔧  Tailscale Init ${removeHostnameMode ? "(remove-hostname)" : "(merge-only)"}\n`);
-  console.log(`    Env file : ${envPath}`);
+  console.log(`    Env file : ${envPathDisplay}`);
   console.log(`    Tailnet  : ${tailnet}`);
   if (removeHostnameMode) {
     console.log(`    Hostname : ${stackName}\n`);
@@ -919,10 +934,21 @@ async function main() {
   const hasRemoteUpdate = remoteAddedTags.length > 0;
   const hasAclFileUpdate = aclFileAddedTags.length > 0;
   const hasEnvUpdate = envUpdates.length > 0;
+  const hasEnvFileUpdate = hasEnvFile && hasEnvUpdate;
   const hasHttpsUpdate = shouldEnableHttps;
 
-  if (!hasRemoteUpdate && !hasAclFileUpdate && !hasEnvUpdate && !hasHttpsUpdate) {
+  if (!hasEnvFile && hasEnvUpdate) {
+    warnings.push("TAILSCALE_TAILNET_DOMAIN was inferred, but no .env path was provided (skipping file update).");
+  }
+
+  if (!hasRemoteUpdate && !hasAclFileUpdate && !hasEnvFileUpdate && !hasHttpsUpdate) {
     console.log("✅  No changes needed.");
+    if (!hasEnvFile && hasEnvUpdate) {
+      envUpdates.forEach((u) => {
+        console.log(`ℹ️   Inferred ${u.key}=${u.after} (not persisted).`);
+      });
+      console.log();
+    }
     if (warnings.length) printList("⚠️   Warnings:", warnings);
     console.log();
     process.exit(0);
@@ -946,6 +972,9 @@ async function main() {
       console.log(`      to  : ${u.after}`);
       if (apiTailnetDomainSource) {
         console.log(`      via : ${apiTailnetDomainSource}`);
+      }
+      if (!hasEnvFile) {
+        console.log("      note: no .env path provided, value will not be persisted");
       }
     });
   }
@@ -1027,7 +1056,7 @@ async function main() {
   }
 
   // 4) Update env last.
-  if (hasEnvUpdate) {
+  if (hasEnvFileUpdate) {
     envUpdates.forEach((u) => {
       upsertEnvLine(envLines, envMap, u.key, u.after);
     });
@@ -1037,6 +1066,10 @@ async function main() {
     }
     fs.writeFileSync(envPath, updatedEnv, "utf-8");
     console.log(`✅  Updated ${envPathArg}`);
+  } else if (hasEnvUpdate) {
+    envUpdates.forEach((u) => {
+      console.log(`ℹ️   Inferred ${u.key}=${u.after} (not persisted; pass .env path to write file).`);
+    });
   }
 
   console.log("\nDone.\n");
