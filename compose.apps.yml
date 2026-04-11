@@ -7,7 +7,6 @@
 #  Minimal required env:
 #    APP_PORT   — Port app listens on inside container
 #    PROJECT_NAME, DOMAIN, CADDY_AUTH_USER, CADDY_AUTH_HASH
-#    TAILSCALE_HTTPS_HOST — internal HTTPS hostname for tailnet access
 # ================================================================
 
 services:
@@ -30,7 +29,7 @@ services:
       - "caddy.basic_auth=/*"
       - "caddy.basic_auth.${CADDY_AUTH_USER:-admin}=${CADDY_AUTH_HASH}"
       # Internal HTTPS site for Tailscale / trusted LAN access.
-      - "caddy_1=https://${TAILSCALE_HTTPS_HOST}"
+      - "caddy_1=https://${STACK_NAME:-mystack}.${TAILSCALE_TAILNET_DOMAIN:-tailnet.local}"
       - "caddy_1.tls=internal"
       - "caddy_1.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
       - "caddy_1.basic_auth=/*"

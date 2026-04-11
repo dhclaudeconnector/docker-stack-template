@@ -150,17 +150,6 @@ check("APP_HOST_PORT", {
   },
 });
 
-check("TAILSCALE_HTTPS_HOST", {
-  required: false,
-  desc: "Internal HTTPS hostname for Caddy on Tailscale / trusted LAN",
-  validate: (v) => {
-    if (v.startsWith("http://") || v.startsWith("https://")) return "Should be a hostname only, without http:// or https://";
-    if (/[\/\s]/.test(v)) return "Should not contain spaces or slashes";
-    return null;
-  },
-  display: (v) => resolveRefs(v),
-});
-
 const appDockerfile = path.resolve(process.cwd(), "services/app/Dockerfile");
 if (!fs.existsSync(appDockerfile)) {
   errors.push("services/app/Dockerfile not found — app service build will fail");
@@ -271,7 +260,9 @@ if (env.ENABLE_TAILSCALE === "true") {
     }
   }
 
-  ok.push(`TAILSCALE_HTTPS_HOST = ${resolveRefs(env.TAILSCALE_HTTPS_HOST || env.STACK_NAME || "mystack")}`);
+  ok.push(
+    `TAILSCALE_INTERNAL_HOST = ${resolveRefs(`${env.STACK_NAME || "mystack"}.${env.TAILSCALE_TAILNET_DOMAIN || "tailnet.local"}`)}`
+  );
 } else {
   ok.push("ENABLE_TAILSCALE = false  (Tailscale skipped)");
 }
@@ -289,7 +280,7 @@ for (const flag of flags) {
 if (env.PROJECT_NAME && env.DOMAIN) {
   const p = env.PROJECT_NAME;
   const d = env.DOMAIN;
-  const tailHost = resolveRefs(env.TAILSCALE_HTTPS_HOST || env.STACK_NAME || "mystack");
+  const tailHost = resolveRefs(`${env.STACK_NAME || "mystack"}.${env.TAILSCALE_TAILNET_DOMAIN || "tailnet.local"}`);
   const preview = [
     `  app    → http://${resolveRefs(env.CLOUDFLARED_TUNNEL_HOSTNAME_1 || `${p}.${d}`)}`,
     env.ENABLE_DOZZLE !== "false" ? `  dozzle → http://${resolveRefs(env.CLOUDFLARED_TUNNEL_HOSTNAME_3 || `logs.${p}.${d}`)}` : null,

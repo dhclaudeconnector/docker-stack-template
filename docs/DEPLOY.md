@@ -48,7 +48,7 @@ flowchart TD
     end
 
     TEAM([👥 Internal Team]) -->|Tailscale VPN + HTTPS| TS[Tailscale]
-    TS -->|https://TAILSCALE_HTTPS_HOST| CADDY
+    TS -->|https://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}| CADDY
 ```
 
 ### Subdomain Convention (auto-generated)
@@ -185,16 +185,16 @@ npm run dockerapp-exec:logs
 
 ### Tailscale vars (only when `ENABLE_TAILSCALE=true`)
 
-| Variable               | Required          | Description                                                                                  |
-| ---------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
-| `TAILSCALE_AUTHKEY`    | ✅                | Auth key from Tailscale admin console                                                        |
-| `TAILSCALE_TAGS`       | ❌                | ACL tags, default `tag:container`                                                            |
-| `TS_API_KEY`           | For `validate:ts` | API key for expiry check                                                                     |
-| `TAILSCALE_HTTPS_HOST` | Recommended       | Hostname Caddy serves with `tls internal`; should resolve inside your tailnet or trusted LAN |
+| Variable                  | Required          | Description                                                        |
+| ------------------------- | ----------------- | ------------------------------------------------------------------ |
+| `TAILSCALE_AUTHKEY`       | ✅                | Auth key from Tailscale admin console                              |
+| `TAILSCALE_TAILNET_DOMAIN`| ✅                | Tailnet DNS suffix (`*.ts.net`) used to build internal HTTPS host  |
+| `TAILSCALE_TAGS`          | ❌                | ACL tags, default `tag:container`                                  |
+| `TS_API_KEY`              | For `validate:ts` | API key for expiry check                                           |
 
 For internal HTTPS via Tailscale:
 
-- Set `TAILSCALE_HTTPS_HOST` to a MagicDNS or split-DNS hostname that resolves to this stack. The starter default is `${STACK_NAME}.tailnet.local`.
+- Internal HTTPS hostname is now derived automatically as `${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}`.
 - Trust Caddy's local root CA from `/data/caddy/pki/authorities/local/root.crt` if clients should accept the certificate without warnings.
 - On Windows/Docker Desktop, the simplest path is usually to run Tailscale on the host so the published `443` port is reachable over the tailnet.
 - The stack keeps public tunnel origins on plain `http://...`, while the dedicated tailnet hostname is served separately over `https://...` with `tls internal`.

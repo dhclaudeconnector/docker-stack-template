@@ -13,7 +13,6 @@
 @app_host_port = {{$dotenv APP_HOST_PORT}}
 @health_path = {{$dotenv HEALTH_PATH}}
 @caddy_auth_user = {{$dotenv CADDY_AUTH_USER}}
-@tailscale_https_host = {{$dotenv TAILSCALE_HTTPS_HOST}}
 @tailscale_tailnet_domain = {{$dotenv TAILSCALE_TAILNET_DOMAIN}}
 
 @app_local = http://localhost:{{app_host_port}}
@@ -22,7 +21,6 @@
 @host_project = {{project_name}}.{{domain}}
 @public_main = https://{{host_main}}
 @public_project = https://{{host_project}}
-@tailscale_https = https://{{tailscale_https_host}}
 @tailscale_magicdns_host = {{stack_name}}.{{tailscale_tailnet_domain}}
 @tailscale_magicdns_https = https://{{tailscale_magicdns_host}}
 @basic_auth = YWRtaW46QWRtaW5AMTIzQWRtaW5AMTIz

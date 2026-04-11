@@ -71,9 +71,6 @@ else
   echo "⚠️  .env not found — using defaults. Run: cp .env.example .env" >&2
 fi
 
-# Shared defaults derived from stack identity.
-export TAILSCALE_HTTPS_HOST="${TAILSCALE_HTTPS_HOST:-${STACK_NAME:-mystack}.tailnet.local}"
-
 # Normalize tags to comma-separated form without spaces.
 if [ -n "${TAILSCALE_TAGS:-}" ]; then
   TAILSCALE_TAGS="$(printf '%s' "$TAILSCALE_TAGS" | tr -d '[:space:]')"
