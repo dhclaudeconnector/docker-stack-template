@@ -234,51 +234,53 @@ if (env.ENABLE_TAILSCALE === "true") {
     ? removeHostnameRawInput === "true"
     : keepIpEnabled;
 
-  if (keepIpEnabled) {
-    check("TAILSCALE_KEEP_IP_FIREBASE_URL", {
-      desc: "Firebase Realtime DB .json URL used to backup tailscaled.state",
-      validate: (v) => (isValidHttpsJsonUrl(v) ? null : "Must be https URL ending with .json"),
-      display: (v) => {
-        try {
-          const u = new URL(v);
-          const redacted = u.search ? "?***" : "";
-          return `${u.origin}${u.pathname}${redacted}`;
-        } catch {
-          return "<invalid-url>";
-        }
-      },
-    });
+  check("TAILSCALE_KEEP_IP_FIREBASE_URL", {
+    desc: "Firebase Realtime DB .json URL used for tailscaled.state + certs backup/restore",
+    validate: (v) => (isValidHttpsJsonUrl(v) ? null : "Must be https URL ending with .json"),
+    display: (v) => {
+      try {
+        const u = new URL(v);
+        const redacted = u.search ? "?***" : "";
+        return `${u.origin}${u.pathname}${redacted}`;
+      } catch {
+        return "<invalid-url>";
+      }
+    },
+  });
 
-    check("TAILSCALE_KEEP_IP_INTERVAL_SEC", {
-      required: false,
-      desc: "Backup interval in seconds",
-      validate: (v) => {
-        const n = Number(v);
-        if (!Number.isInteger(n) || n < 5) return "Must be an integer >= 5";
-        return null;
-      },
-    });
+  check("TAILSCALE_KEEP_IP_INTERVAL_SEC", {
+    required: false,
+    desc: "Backup interval in seconds",
+    validate: (v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 5) return "Must be an integer >= 5";
+      return null;
+    },
+  });
+
+  if (!keepIpEnabled) {
+    warnings.push("TAILSCALE_KEEP_IP_ENABLE=false — state backup/restore is disabled (certs backup/restore still runs).");
   }
 
-  if (keepIpEnabled || removeHostnameEnabled) {
+  if (removeHostnameEnabled) {
     if (!env.TAILSCALE_CLIENDID && !env.TAILSCALE_CLIENTID) {
       errors.push(
-        "TAILSCALE_KEEP_IP_ENABLE=true or TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true requires TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID) for OAuth token."
+        "TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true requires TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID) for OAuth token."
       );
     }
     const oauthForKeepIp = (env.TAILSCALE_OAUTH_SECRET || env.TAILSCALE_AUTHKEY || "").trim();
     if (!env.TAILSCALE_OAUTH_SECRET) {
       warnings.push(
-        "TAILSCALE keep-ip/remove-hostname is enabled and TAILSCALE_OAUTH_SECRET is empty — using TAILSCALE_AUTHKEY fallback."
+        "TAILSCALE remove-hostname is enabled and TAILSCALE_OAUTH_SECRET is empty — using TAILSCALE_AUTHKEY fallback."
       );
     }
     if (!oauthForKeepIp) {
       errors.push(
-        "TAILSCALE_KEEP_IP_ENABLE=true or TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true requires TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback) for API calls."
+        "TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true requires TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback) for API calls."
       );
     } else if (!oauthForKeepIp.startsWith("tskey-client-")) {
       errors.push(
-        "TAILSCALE keep-ip/remove-hostname requires OAuth secret format tskey-client-... in TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback)."
+        "TAILSCALE remove-hostname requires OAuth secret format tskey-client-... in TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback)."
       );
     }
   }

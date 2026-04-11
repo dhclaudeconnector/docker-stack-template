@@ -10,18 +10,23 @@ const crypto = require("crypto");
 // tailscale/tailscale-keep-ip.js
 // Modes:
 //   prepare     - optionally restore tailscaled.state from Firebase (base64),
-//                 and/or remove existing machine(s) by STACK_NAME
-//   backup-loop - periodically backup tailscaled.state to Firebase
+//                 restore certs, and/or remove existing machine(s) by STACK_NAME
+//   backup-loop - periodically backup tailscaled.state + certs to Firebase
 //
 // Environment:
 //   TAILSCALE_KEEP_IP_ENABLE=true|false
 //   TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true|false
 //   TAILSCALE_KEEP_IP_FIREBASE_URL=<https://.../path.json?auth=...>
 //   TAILSCALE_KEEP_IP_STATE_FILE=/var/lib/tailscale/tailscaled.state
+//   TAILSCALE_KEEP_IP_CERTS_DIR=/var/lib/tailscale/certs
 //   TAILSCALE_KEEP_IP_INTERVAL_SEC=30
 //   STACK_NAME=<hostname to keep>
 //   TAILSCALE_TS_TAILNET=- (or TS_TAILNET)
 //   TAILSCALE_CLIENDID + (TAILSCALE_OAUTH_SECRET or TAILSCALE_AUTHKEY)
+//
+// Firebase keys (under the same base URL):
+//   - state: tailscaled.state payload
+//   - certs: /var/lib/tailscale/certs snapshot payload
 // ================================================================
 
 function toBool(value, fallback = false) {
@@ -194,6 +199,69 @@ function isLikelyFirebaseUrl(url) {
   }
 }
 
+function firebaseChildUrl(firebaseUrl, childKey) {
+  if (!isLikelyFirebaseUrl(firebaseUrl)) return "";
+  const parsed = new URL(firebaseUrl);
+  const cleanedChild = String(childKey || "").trim().replace(/[^A-Za-z0-9_-]/g, "");
+  if (!cleanedChild) return firebaseUrl;
+  parsed.pathname = parsed.pathname.replace(/\.json$/, `/${cleanedChild}.json`);
+  return parsed.toString();
+}
+
+function toPosixRelativePath(rootDir, absPath) {
+  return path.relative(rootDir, absPath).split(path.sep).join("/");
+}
+
+function isSafeRelativePosixPath(value) {
+  if (!value || typeof value !== "string") return false;
+  const normalized = path.posix.normalize(value.trim());
+  if (!normalized || normalized === ".") return false;
+  if (normalized.startsWith("../") || normalized === "..") return false;
+  if (normalized.includes("\\")) return false;
+  if (path.posix.isAbsolute(normalized)) return false;
+  return true;
+}
+
+function collectFilesRecursive(rootDir) {
+  if (!fs.existsSync(rootDir)) return [];
+  const out = [];
+  const stack = [rootDir];
+  while (stack.length) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const abs = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const rel = toPosixRelativePath(rootDir, abs);
+      if (!isSafeRelativePosixPath(rel)) continue;
+      const buf = fs.readFileSync(abs);
+      const stat = fs.statSync(abs);
+      out.push({
+        relPath: rel,
+        mode: stat.mode & 0o777,
+        data: buf,
+      });
+    }
+  }
+  out.sort((a, b) => a.relPath.localeCompare(b.relPath));
+  return out;
+}
+
+function sha256ForFiles(files) {
+  const h = crypto.createHash("sha256");
+  for (const f of files) {
+    h.update(f.relPath);
+    h.update("\0");
+    h.update(f.data);
+    h.update("\0");
+  }
+  return h.digest("hex");
+}
+
 function readStateFile(stateFilePath) {
   if (!fs.existsSync(stateFilePath)) return null;
   try {
@@ -300,6 +368,113 @@ async function restoreState({ firebaseUrl, stateFilePath }) {
   return true;
 }
 
+async function backupCerts({
+  firebaseUrl,
+  certsDirPath,
+  hostname,
+  tailnet,
+  modeLabel,
+  lastHashRef,
+}) {
+  const files = collectFilesRecursive(certsDirPath);
+  if (!files.length) {
+    if (lastHashRef.value !== "__EMPTY__") {
+      console.log(`ℹ️  ${modeLabel}: certs dir has no files yet: ${certsDirPath}`);
+    }
+    lastHashRef.value = "__EMPTY__";
+    return false;
+  }
+
+  const hash = sha256ForFiles(files);
+  if (lastHashRef.value && lastHashRef.value === hash) {
+    return false;
+  }
+
+  const payload = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    hostname,
+    tailnet,
+    dirPath: certsDirPath,
+    fileCount: files.length,
+    sizeBytes: files.reduce((sum, f) => sum + f.data.length, 0),
+    sha256: hash,
+    files: files.map((f) => ({
+      path: f.relPath,
+      mode: f.mode,
+      dataBase64: f.data.toString("base64"),
+    })),
+  };
+
+  const putRes = await apiRequest({
+    method: "PUT",
+    url: firebaseUrl,
+    body: payload,
+  });
+
+  if (putRes.status < 200 || putRes.status >= 300) {
+    throw new Error(`${modeLabel}: Firebase PUT certs failed (HTTP ${putRes.status})`);
+  }
+
+  lastHashRef.value = hash;
+  console.log(
+    `✅  ${modeLabel}: uploaded certs (${payload.fileCount} files, ${payload.sizeBytes} bytes, sha256=${hash.slice(0, 12)}...)`,
+  );
+  return true;
+}
+
+async function restoreCerts({ firebaseUrl, certsDirPath }) {
+  const getRes = await apiRequest({
+    method: "GET",
+    url: firebaseUrl,
+  });
+
+  if (getRes.status === 404) {
+    console.log("ℹ️  certs restore: no backup found (404).");
+    return false;
+  }
+  if (getRes.status < 200 || getRes.status >= 300) {
+    throw new Error(`certs restore: Firebase GET failed (HTTP ${getRes.status})`);
+  }
+
+  const doc = getRes.body;
+  if (!doc || typeof doc !== "object" || !Array.isArray(doc.files)) {
+    console.log("ℹ️  certs restore: no files payload found.");
+    return false;
+  }
+
+  let restored = 0;
+  for (const item of doc.files) {
+    const rel = typeof item?.path === "string" ? item.path : "";
+    if (!isSafeRelativePosixPath(rel)) continue;
+    const b64 = typeof item?.dataBase64 === "string" ? item.dataBase64 : "";
+    if (!b64) continue;
+
+    const abs = path.join(certsDirPath, ...rel.split("/"));
+    const buf = Buffer.from(b64, "base64");
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, buf);
+
+    const mode = Number(item.mode);
+    if (Number.isInteger(mode) && mode >= 0 && mode <= 0o777) {
+      try {
+        fs.chmodSync(abs, mode);
+      } catch {
+        // ignore mode errors across platforms/filesystems
+      }
+    }
+    restored += 1;
+  }
+
+  if (!restored) {
+    console.log("ℹ️  certs restore: payload found but no valid files restored.");
+    return false;
+  }
+
+  console.log(`✅  certs restore: wrote ${restored} file(s) into ${certsDirPath}`);
+  return true;
+}
+
 async function removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId }) {
   if (!hostname) {
     console.log("⚠️  remove-hostname: STACK_NAME is empty, skipping.");
@@ -380,34 +555,66 @@ async function run() {
 
   const firebaseUrl = (process.env.TAILSCALE_KEEP_IP_FIREBASE_URL || "").trim();
   const stateFilePath = (process.env.TAILSCALE_KEEP_IP_STATE_FILE || "/var/lib/tailscale/tailscaled.state").trim();
+  const certsDirPath = (
+    process.env.TAILSCALE_KEEP_IP_CERTS_DIR ||
+    path.join(path.dirname(stateFilePath), "certs")
+  ).trim();
   const intervalSecRaw = (process.env.TAILSCALE_KEEP_IP_INTERVAL_SEC || "30").trim();
   const intervalSec = Number.isInteger(Number(intervalSecRaw)) ? Number(intervalSecRaw) : 30;
   const hostname = (process.env.STACK_NAME || "").trim();
   const tailnet = (process.env.TAILSCALE_TS_TAILNET || process.env.TS_TAILNET || "-").trim() || "-";
   const oauthSecret = (process.env.TAILSCALE_OAUTH_SECRET || process.env.TAILSCALE_AUTHKEY || "").trim();
   const clientId = (process.env.TAILSCALE_CLIENDID || process.env.TAILSCALE_CLIENTID || "").trim();
+  const hasFirebaseUrl = isLikelyFirebaseUrl(firebaseUrl);
+  const firebaseStateUrl = hasFirebaseUrl ? firebaseChildUrl(firebaseUrl, "state") : "";
+  const firebaseCertsUrl = hasFirebaseUrl ? firebaseChildUrl(firebaseUrl, "certs") : "";
 
   console.log(`\n🔐  Tailscale Keep IP (${mode})`);
   console.log(`    keep_ip_enabled           : ${keepIpEnabled}`);
   console.log(`    remove_hostname_enabled   : ${removeHostnameEnabled}`);
-  console.log(`    state   : ${stateFilePath}`);
-  console.log(`    host    : ${hostname || "(missing)"}`);
-  console.log(`    tailnet : ${tailnet}\n`);
+  console.log(`    state_path                : ${stateFilePath}`);
+  console.log(`    certs_path                : ${certsDirPath}`);
+  console.log(`    host                      : ${hostname || "(missing)"}`);
+  console.log(`    tailnet                   : ${tailnet}`);
+  console.log(`    firebase_url_valid        : ${hasFirebaseUrl}\n`);
 
   if (mode === "prepare") {
-    if (!keepIpEnabled && !removeHostnameEnabled) {
-      console.log("ℹ️  Both keep-ip restore and remove-hostname are disabled, skipping prepare.\n");
-      process.exit(0);
+    if (!hasFirebaseUrl) {
+      console.log("⚠️  prepare: TAILSCALE_KEEP_IP_FIREBASE_URL is invalid/missing, skipping cert/state restore.");
+    } else {
+      try {
+        await restoreCerts({ firebaseUrl: firebaseCertsUrl, certsDirPath });
+      } catch (err) {
+        console.log(`⚠️  prepare: certs restore failed (${err.message}), continuing.`);
+      }
+
+      if (keepIpEnabled) {
+        let restored = false;
+        try {
+          restored = await restoreState({ firebaseUrl: firebaseStateUrl, stateFilePath });
+        } catch (err) {
+          console.error(`❌  prepare: state restore failed (${err.message})`);
+          process.exit(1);
+        }
+
+        // Backward compatibility: fallback to legacy root payload.
+        if (!restored && firebaseStateUrl !== firebaseUrl) {
+          console.log("ℹ️  prepare: no state under key 'state', trying legacy root payload...");
+          try {
+            await restoreState({ firebaseUrl, stateFilePath });
+          } catch (err) {
+            console.error(`❌  prepare: legacy state restore failed (${err.message})`);
+            process.exit(1);
+          }
+        }
+      } else {
+        console.log("ℹ️  prepare: keep-ip restore disabled by TAILSCALE_KEEP_IP_ENABLE=false.");
+      }
     }
 
-    if (keepIpEnabled) {
-      if (!isLikelyFirebaseUrl(firebaseUrl)) {
-        console.error("❌  TAILSCALE_KEEP_IP_FIREBASE_URL is invalid or missing (must be https URL ending with .json).");
-        process.exit(1);
-      }
-      await restoreState({ firebaseUrl, stateFilePath });
-    } else {
-      console.log("ℹ️  prepare: keep-ip restore disabled by TAILSCALE_KEEP_IP_ENABLE=false.");
+    if (keepIpEnabled && !hasFirebaseUrl) {
+      console.error("❌  TAILSCALE_KEEP_IP_ENABLE=true requires valid TAILSCALE_KEEP_IP_FIREBASE_URL.");
+      process.exit(1);
     }
 
     if (removeHostnameEnabled) {
@@ -416,44 +623,60 @@ async function run() {
       console.log("ℹ️  prepare: remove-hostname disabled by TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=false.");
     }
 
+    if (!keepIpEnabled && !removeHostnameEnabled && !hasFirebaseUrl) {
+      console.log("ℹ️  prepare: no enabled action, done.");
+    }
+
     console.log("\n✅  prepare complete.\n");
     process.exit(0);
   }
 
   if (mode === "backup-once") {
-    if (!keepIpEnabled) {
-      console.log("ℹ️  TAILSCALE_KEEP_IP_ENABLE=false, skipping backup-once.\n");
-      process.exit(0);
-    }
-    if (!isLikelyFirebaseUrl(firebaseUrl)) {
+    if (!hasFirebaseUrl) {
       console.error("❌  TAILSCALE_KEEP_IP_FIREBASE_URL is invalid or missing (must be https URL ending with .json).");
       process.exit(1);
     }
-    await backupState({
-      firebaseUrl,
-      stateFilePath,
+
+    await backupCerts({
+      firebaseUrl: firebaseCertsUrl,
+      certsDirPath,
       hostname,
       tailnet,
-      modeLabel: "backup-once",
+      modeLabel: "backup-once/certs",
       lastHashRef: { value: "" },
     });
+
+    if (keepIpEnabled) {
+      await backupState({
+        firebaseUrl: firebaseStateUrl,
+        stateFilePath,
+        hostname,
+        tailnet,
+        modeLabel: "backup-once/state",
+        lastHashRef: { value: "" },
+      });
+    } else {
+      console.log("ℹ️  backup-once: state backup disabled by TAILSCALE_KEEP_IP_ENABLE=false.");
+    }
+
     console.log("\n✅  backup-once complete.\n");
     process.exit(0);
   }
 
   if (mode === "backup-loop") {
-    if (!keepIpEnabled) {
-      console.log("ℹ️  TAILSCALE_KEEP_IP_ENABLE=false, skipping backup-loop.\n");
-      process.exit(0);
-    }
-    if (!isLikelyFirebaseUrl(firebaseUrl)) {
+    if (!hasFirebaseUrl) {
       console.error("❌  TAILSCALE_KEEP_IP_FIREBASE_URL is invalid or missing (must be https URL ending with .json).");
       process.exit(1);
     }
 
     const everyMs = Math.max(5, intervalSec) * 1000;
-    const lastHashRef = { value: "" };
+    const lastStateHashRef = { value: "" };
+    const lastCertsHashRef = { value: "" };
     console.log(`ℹ️  backup-loop: interval ${Math.max(5, intervalSec)}s`);
+    if (!keepIpEnabled) {
+      console.log("ℹ️  backup-loop: state backup disabled by TAILSCALE_KEEP_IP_ENABLE=false.");
+    }
+    console.log("ℹ️  backup-loop: certs backup is always enabled.");
 
     let stopping = false;
     const stop = (signal) => {
@@ -465,17 +688,32 @@ async function run() {
     process.on("SIGTERM", () => stop("SIGTERM"));
 
     while (!stopping) {
+      if (keepIpEnabled) {
+        try {
+          await backupState({
+            firebaseUrl: firebaseStateUrl,
+            stateFilePath,
+            hostname,
+            tailnet,
+            modeLabel: "backup-loop/state",
+            lastHashRef: lastStateHashRef,
+          });
+        } catch (err) {
+          console.log(`⚠️  backup-loop/state: ${err.message}`);
+        }
+      }
+
       try {
-        await backupState({
-          firebaseUrl,
-          stateFilePath,
+        await backupCerts({
+          firebaseUrl: firebaseCertsUrl,
+          certsDirPath,
           hostname,
           tailnet,
-          modeLabel: "backup-loop",
-          lastHashRef,
+          modeLabel: "backup-loop/certs",
+          lastHashRef: lastCertsHashRef,
         });
       } catch (err) {
-        console.log(`⚠️  backup-loop: ${err.message}`);
+        console.log(`⚠️  backup-loop/certs: ${err.message}`);
       }
       await sleep(everyMs);
     }

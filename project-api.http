@@ -23,6 +23,7 @@
 @public_project = https://{{host_project}}
 @tailscale_magicdns_host = {{stack_name}}.{{tailscale_tailnet_domain}}
 @tailscale_magicdns_https = https://{{tailscale_magicdns_host}}
+@tailscale_magicdns_http = http://{{tailscale_magicdns_host}}
 @basic_auth = YWRtaW46QWRtaW5AMTIzQWRtaW5AMTIz
 
 ###
@@ -85,5 +86,16 @@ Authorization: Basic {{basic_auth}}
 
 ###
 GET {{tailscale_magicdns_https}}{{health_path}}
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+# Tailscale HTTP via MagicDNS (*.ts.net) served by TS_SERVE_CONFIG.
+GET {{tailscale_magicdns_http}}/
+Accept: application/json
+Authorization: Basic {{basic_auth}}
+
+###
+GET {{tailscale_magicdns_http}}{{health_path}}
 Accept: application/json
 Authorization: Basic {{basic_auth}}
