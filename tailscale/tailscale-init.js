@@ -9,14 +9,22 @@
 //  Usage:
 //    node tailscale/tailscale-init.js .env
 //    node tailscale/tailscale-init.js .env --yes
+//    node tailscale/tailscale-init.js --remove-hostname
+//    node tailscale/tailscale-init.js .env --remove-hostname --yes
 //
 //  Required in target .env (or process env):
 //    TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID)
 //      - OAuth client ID (for example: kFhHFn4CBE11CNTRL)
 //    TAILSCALE_AUTHKEY
 //      - OAuth client secret (tskey-client-...)
+//
+//  Required for default init flow:
 //    TAILSCALE_TAGS
 //      - Comma-separated tags to ensure exist in tagOwners
+//
+//  Required for --remove-hostname flow:
+//    STACK_NAME
+//      - Device hostname to remove from tailnet
 //
 //  Optional:
 //    TAILSCALE_TS_TAILNET      - Tailnet identifier for API calls (default: -)
@@ -139,6 +147,55 @@ function pickMostFrequent(items) {
     }
   }
   return best;
+}
+
+function normalizeHostLabel(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().toLowerCase();
+}
+
+function shortHostnameFromName(value) {
+  const clean = normalizeHostLabel(value);
+  if (!clean) return "";
+  const first = clean.split(".")[0];
+  return first || clean;
+}
+
+function collectDeviceHostCandidates(device) {
+  if (!device || typeof device !== "object") return [];
+  const candidates = [];
+  const rawValues = [
+    device.hostname,
+    device.name,
+    device.computedName,
+    device.givenName,
+    device.machineName,
+    device.dnsName,
+  ];
+
+  rawValues.forEach((raw) => {
+    const full = normalizeHostLabel(raw);
+    if (!full) return;
+    candidates.push(full);
+    const short = shortHostnameFromName(full);
+    if (short) candidates.push(short);
+  });
+
+  return uniqueStable(candidates);
+}
+
+function pickDeviceId(device) {
+  if (!device || typeof device !== "object") return "";
+  const id = device.nodeId || device.id || device.deviceId || "";
+  return String(id).trim();
+}
+
+function formatDeviceForLog(device) {
+  const id = pickDeviceId(device) || "(missing-id)";
+  const hostname = device && typeof device.hostname === "string" ? device.hostname : "";
+  const name = device && typeof device.name === "string" ? device.name : "";
+  const label = hostname || shortHostnameFromName(name) || "(unknown-host)";
+  return `${label} [${id}]`;
 }
 
 function askConfirm(question) {
@@ -411,14 +468,9 @@ function printList(header, values) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const envPathArg = args.find((arg) => !arg.startsWith("-"));
+  const removeHostnameMode = args.includes("--remove-hostname");
+  const envPathArg = args.find((arg) => !arg.startsWith("-")) || ".env";
   const autoYes = args.includes("--yes") || args.includes("-y");
-
-  if (!envPathArg) {
-    console.error("❌  Missing .env path argument.");
-    console.error("    Usage: node tailscale/tailscale-init.js .env [--yes]");
-    process.exit(1);
-  }
 
   const envPath = path.resolve(process.cwd(), envPathArg);
   if (!fs.existsSync(envPath)) {
@@ -444,6 +496,7 @@ async function main() {
     process.env.TAILSCALE_TS_TAILNET || getEnvValue(envMap, "TAILSCALE_TS_TAILNET");
   const tailnetFromLegacy = process.env.TS_TAILNET || getEnvValue(envMap, "TS_TAILNET");
   const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
+  const stackName = (process.env.STACK_NAME || getEnvValue(envMap, "STACK_NAME")).trim();
   const existingTailnetDomainRaw = getEnvValue(envMap, "TAILSCALE_TAILNET_DOMAIN");
   const existingTailnetDomain = normalizeTailnetDomain(existingTailnetDomainRaw);
   const aclFilePathRaw = process.env.TAILSCALE_ACL_JSON_PATH || getEnvValue(envMap, "TAILSCALE_ACL_JSON_PATH");
@@ -479,24 +532,34 @@ async function main() {
     warnings.push("Using deprecated TS_TAILNET. Please migrate to TAILSCALE_TS_TAILNET.");
   }
 
-  if (!requiredTags.length) {
-    errors.push("TAILSCALE_TAGS is empty or invalid. Provide one or more tags (example: tag:ci,tag:container).");
-  }
-  if (invalidTags.length) {
-    warnings.push(`Ignoring invalid tag format(s): ${invalidTags.join(", ")}`);
-  }
-  if (!defaultOwners.length) {
-    errors.push("TAILSCALE_TAG_OWNERS is empty. Example: autogroup:admin");
+  if (removeHostnameMode) {
+    if (!stackName) {
+      errors.push("Missing STACK_NAME. --remove-hostname requires STACK_NAME in .env.");
+    }
+  } else {
+    if (!requiredTags.length) {
+      errors.push("TAILSCALE_TAGS is empty or invalid. Provide one or more tags (example: tag:ci,tag:container).");
+    }
+    if (invalidTags.length) {
+      warnings.push(`Ignoring invalid tag format(s): ${invalidTags.join(", ")}`);
+    }
+    if (!defaultOwners.length) {
+      errors.push("TAILSCALE_TAG_OWNERS is empty. Example: autogroup:admin");
+    }
   }
 
   if (existingTailnetDomain && !isLikelyDomain(existingTailnetDomain)) {
     warnings.push(`TAILSCALE_TAILNET_DOMAIN may be invalid: ${existingTailnetDomainRaw}`);
   }
 
-  console.log("\n🔧  Tailscale Init (merge-only)\n");
+  console.log(`\n🔧  Tailscale Init ${removeHostnameMode ? "(remove-hostname)" : "(merge-only)"}\n`);
   console.log(`    Env file : ${envPath}`);
   console.log(`    Tailnet  : ${tailnet}`);
-  console.log(`    Tags(env): ${requiredTags.join(", ")}\n`);
+  if (removeHostnameMode) {
+    console.log(`    Hostname : ${stackName}\n`);
+  } else {
+    console.log(`    Tags(env): ${requiredTags.join(", ")}\n`);
+  }
 
   if (errors.length) {
     printList("❌  Cannot continue:", errors);
@@ -528,6 +591,134 @@ async function main() {
   }
 
   const encodedTailnet = encodeURIComponent(tailnet);
+
+  if (removeHostnameMode) {
+    let devices = [];
+    try {
+      const devicesRes = await apiRequestJson({
+        method: "GET",
+        endpointPath: `/tailnet/${encodedTailnet}/devices`,
+        accessToken,
+      });
+
+      if (devicesRes.status === 200) {
+        if (devicesRes.body && Array.isArray(devicesRes.body.devices)) {
+          devices = devicesRes.body.devices;
+        } else if (Array.isArray(devicesRes.body)) {
+          devices = devicesRes.body;
+        } else {
+          errors.push("Unexpected devices response shape from Tailscale API.");
+        }
+      } else if (devicesRes.status === 401) {
+        errors.push("Unauthorized (401) when reading devices. Check OAuth credential scopes.");
+      } else if (devicesRes.status === 403) {
+        errors.push("Forbidden (403) when reading devices. Missing scope: devices:core:read.");
+      } else {
+        errors.push(`Failed to read devices: HTTP ${devicesRes.status}.`);
+      }
+    } catch (err) {
+      errors.push(`Failed to read devices: ${err.message}`);
+    }
+
+    if (errors.length) {
+      printList("❌  Cannot continue:", errors);
+      if (warnings.length) printList("⚠️   Warnings:", warnings);
+      process.exit(1);
+    }
+
+    const targetHostname = normalizeHostLabel(stackName);
+    const matchedDevices = devices.filter((device) => collectDeviceHostCandidates(device).includes(targetHostname));
+
+    if (!matchedDevices.length) {
+      console.log(`✅  No device matched hostname "${stackName}". Nothing to remove.`);
+      if (warnings.length) printList("⚠️   Warnings:", warnings);
+      console.log();
+      process.exit(0);
+    }
+
+    console.log("Planned changes:");
+    console.log(`  - Remove ${matchedDevices.length} device(s) matching hostname "${stackName}":`);
+    matchedDevices.forEach((device) => {
+      console.log(`      - ${formatDeviceForLog(device)}`);
+    });
+    console.log();
+
+    if (warnings.length) printList("⚠️   Warnings:", warnings);
+
+    let approved = autoYes;
+    if (!approved) {
+      if (!process.stdin.isTTY) {
+        console.error("❌  Confirmation required but no interactive TTY available.");
+        console.error("    Re-run with --yes to apply non-interactively.\n");
+        process.exit(1);
+      }
+      const answer = await askConfirm("Remove these device(s)? (y/N): ");
+      approved = answer === "y" || answer === "yes";
+    }
+
+    if (!approved) {
+      console.log("\nℹ️   Cancelled. No changes applied.\n");
+      process.exit(0);
+    }
+
+    let removedCount = 0;
+    const removeErrors = [];
+    const removeWarnings = [];
+
+    for (const device of matchedDevices) {
+      const deviceId = pickDeviceId(device);
+      const deviceLabel = formatDeviceForLog(device);
+      if (!deviceId) {
+        removeErrors.push(`Missing device id: ${deviceLabel}`);
+        continue;
+      }
+
+      try {
+        const deleteRes = await apiRequestJson({
+          method: "DELETE",
+          endpointPath: `/device/${encodeURIComponent(deviceId)}`,
+          accessToken,
+        });
+
+        if (deleteRes.status === 200 || deleteRes.status === 202 || deleteRes.status === 204) {
+          removedCount += 1;
+          console.log(`✅  Removed device: ${deviceLabel}`);
+          continue;
+        }
+
+        if (deleteRes.status === 404) {
+          removeWarnings.push(`Device already removed or not found: ${deviceLabel}`);
+          continue;
+        }
+
+        if (deleteRes.status === 401) {
+          removeErrors.push(`Unauthorized (401) while removing ${deviceLabel}.`);
+          continue;
+        }
+
+        if (deleteRes.status === 403) {
+          removeErrors.push(`Forbidden (403) while removing ${deviceLabel}. Missing scope: devices:core.`);
+          continue;
+        }
+
+        const apiMessage =
+          deleteRes.body && typeof deleteRes.body.message === "string" ? ` ${deleteRes.body.message}` : "";
+        removeErrors.push(`Failed to remove ${deviceLabel}: HTTP ${deleteRes.status}.${apiMessage}`);
+      } catch (err) {
+        removeErrors.push(`Failed to remove ${deviceLabel}: ${err.message}`);
+      }
+    }
+
+    if (removeWarnings.length) printList("⚠️   Remove warnings:", removeWarnings);
+
+    if (removeErrors.length) {
+      printList("❌  Remove failed:", removeErrors);
+      process.exit(1);
+    }
+
+    console.log(`\n✅  Removed ${removedCount} device(s) matching hostname "${stackName}".\n`);
+    process.exit(0);
+  }
 
   let remotePolicy = null;
   let remotePolicyETag = "";
