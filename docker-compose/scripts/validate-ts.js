@@ -2,7 +2,7 @@
 // ================================================================
 //  docker-compose/scripts/validate-ts.js
 //  Validates Tailscale auth key format and optionally checks
-//  expiry via the Tailscale API.
+//  expiry via the Tailscale API for node auth keys.
 //
 //  Requires in .env:
 //    TAILSCALE_AUTHKEY
@@ -62,13 +62,16 @@ if (!TAILSCALE_AUTHKEY.startsWith("tskey-")) {
   errors.push('Key should start with "tskey-"');
 }
 
-if (TAILSCALE_AUTHKEY.startsWith("tskey-") && !TAILSCALE_AUTHKEY.startsWith("tskey-auth-")) {
-  warnings.push('Key starts with "tskey-" but not "tskey-auth-" — for auth keys the prefix should be "tskey-auth-"');
+const parts = TAILSCALE_AUTHKEY.split("-");
+const isNodeAuthKey = TAILSCALE_AUTHKEY.startsWith("tskey-auth-");
+const isOAuthClientSecret = TAILSCALE_AUTHKEY.startsWith("tskey-client-");
+
+if (!isNodeAuthKey && !isOAuthClientSecret) {
+  warnings.push('Unrecognized Tailscale key type. Expected "tskey-auth-" or "tskey-client-".');
 }
 
-const parts = TAILSCALE_AUTHKEY.split("-");
 if (parts.length < 3) {
-  errors.push("Key format looks incorrect — expected format: tskey-auth-<id>-<secret>");
+  errors.push("Key format looks incorrect — expected format: tskey-<type>-<id>-<secret>");
 }
 
 if (TAILSCALE_AUTHKEY.length < 50) {
@@ -97,6 +100,13 @@ if (errors.length) {
 if (!TS_API_KEY) {
   console.log("\nℹ️   TS_API_KEY not set → skipping key expiry check via API.");
   console.log("    Set TS_API_KEY in .env to enable expiry verification.\n");
+  console.log("✅  Validation complete (format only)\n");
+  process.exit(0);
+}
+
+if (isOAuthClientSecret) {
+  console.log("\nℹ️   Detected OAuth client secret (tskey-client-...).");
+  console.log("    Expiry check via /keys is skipped for OAuth client secrets.");
   console.log("✅  Validation complete (format only)\n");
   process.exit(0);
 }

@@ -7,10 +7,11 @@
 #    tailscale-windows — userspace mode (Windows/WSL2 host)
 #
 #  Required env (when ENABLE_TAILSCALE=true):
-#    TAILSCALE_NODE_AUTHKEY (or fallback TAILSCALE_AUTHKEY), TAILSCALE_TAGS
+#    TAILSCALE_AUTHKEY, TAILSCALE_TAGS
 #  Optional keep-ip env:
 #    TAILSCALE_KEEP_IP_ENABLE, TAILSCALE_KEEP_IP_FIREBASE_URL,
-#    TAILSCALE_KEEP_IP_INTERVAL_SEC, TAILSCALE_CLIENDID, TAILSCALE_AUTHKEY
+#    TAILSCALE_KEEP_IP_INTERVAL_SEC, TAILSCALE_CLIENDID,
+#    TAILSCALE_OAUTH_SECRET (or fallback TAILSCALE_AUTHKEY)
 # ================================================================
 
 volumes:
@@ -29,6 +30,7 @@ services:
       STACK_NAME: "${STACK_NAME:-mystack}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
       TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TAILSCALE_OAUTH_SECRET: "${TAILSCALE_OAUTH_SECRET:-}"
       TAILSCALE_CLIENDID: "${TAILSCALE_CLIENDID:-}"
       TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
     user: "0:0"
@@ -50,6 +52,7 @@ services:
       STACK_NAME: "${STACK_NAME:-mystack}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
       TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
+      TAILSCALE_OAUTH_SECRET: "${TAILSCALE_OAUTH_SECRET:-}"
       TAILSCALE_CLIENDID: "${TAILSCALE_CLIENDID:-}"
       TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
     user: "0:0"
@@ -68,11 +71,11 @@ services:
       tailscale-keep-ip-prepare-linux:
         condition: service_completed_successfully
     environment:
-      TS_AUTHKEY: "${TAILSCALE_NODE_AUTHKEY:-}"
+      TS_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
       TS_USERSPACE: "false"
       TS_SERVE_CONFIG: /config/serve/serve.json
       TS_EXTRA_ARGS: >-
-        --advertise-tags="${TAILSCALE_TAGS:-tag:container}"
+        --advertise-tags=${TAILSCALE_TAGS:-tag:container}
         --accept-dns=true
         --accept-routes
       TS_STATE_DIR: /var/lib/tailscale
@@ -95,7 +98,7 @@ services:
       tailscale-keep-ip-prepare-windows:
         condition: service_completed_successfully
     environment:
-      TAILSCALE_AUTHKEY: "${TAILSCALE_NODE_AUTHKEY:-}"
+      TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
       TS_USERSPACE: "true"
       TS_SERVE_CONFIG: /config/serve/serve.json
       TS_EXTRA_ARGS: >-

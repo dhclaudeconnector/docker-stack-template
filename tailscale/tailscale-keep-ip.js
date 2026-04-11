@@ -20,7 +20,7 @@ const crypto = require("crypto");
 //   TAILSCALE_KEEP_IP_INTERVAL_SEC=30
 //   STACK_NAME=<hostname to keep>
 //   TAILSCALE_TS_TAILNET=- (or TS_TAILNET)
-//   TAILSCALE_CLIENDID + TAILSCALE_AUTHKEY
+//   TAILSCALE_CLIENDID + (TAILSCALE_OAUTH_SECRET or TAILSCALE_AUTHKEY)
 // ================================================================
 
 function toBool(value, fallback = false) {
@@ -299,19 +299,19 @@ async function restoreState({ firebaseUrl, stateFilePath }) {
   return true;
 }
 
-async function removeHostnameFromTailnet({ hostname, tailnet, authKey, clientId }) {
+async function removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId }) {
   if (!hostname) {
     console.log("⚠️  remove-hostname: STACK_NAME is empty, skipping.");
     return;
   }
-  if (!authKey || !clientId) {
-    console.log("⚠️  remove-hostname: missing TAILSCALE_AUTHKEY/TAILSCALE_CLIENDID, skipping.");
+  if (!oauthSecret || !clientId) {
+    console.log("⚠️  remove-hostname: missing OAuth secret or TAILSCALE_CLIENDID, skipping.");
     return;
   }
 
   let accessToken = "";
   try {
-    const tokenRes = await getOAuthAccessToken(clientId, authKey);
+    const tokenRes = await getOAuthAccessToken(clientId, oauthSecret);
     if (tokenRes.status === 200 && tokenRes.body && tokenRes.body.access_token) {
       accessToken = tokenRes.body.access_token;
     } else {
@@ -379,7 +379,7 @@ async function run() {
   const intervalSec = Number.isInteger(Number(intervalSecRaw)) ? Number(intervalSecRaw) : 30;
   const hostname = (process.env.STACK_NAME || "").trim();
   const tailnet = (process.env.TAILSCALE_TS_TAILNET || process.env.TS_TAILNET || "-").trim() || "-";
-  const authKey = (process.env.TAILSCALE_AUTHKEY || "").trim();
+  const oauthSecret = (process.env.TAILSCALE_OAUTH_SECRET || process.env.TAILSCALE_AUTHKEY || "").trim();
   const clientId = (process.env.TAILSCALE_CLIENDID || process.env.TAILSCALE_CLIENTID || "").trim();
 
   console.log(`\n🔐  Tailscale Keep IP (${mode})`);
@@ -400,7 +400,7 @@ async function run() {
 
   if (mode === "prepare") {
     await restoreState({ firebaseUrl, stateFilePath });
-    await removeHostnameFromTailnet({ hostname, tailnet, authKey, clientId });
+    await removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId });
     console.log("\n✅  prepare complete.\n");
     process.exit(0);
   }

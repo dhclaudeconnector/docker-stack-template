@@ -191,26 +191,26 @@ if (!fs.existsSync(cfConfig)) {
 
 // ── Tailscale (conditional) ───────────────────────────────────────
 if (env.ENABLE_TAILSCALE === "true") {
-  check("TAILSCALE_NODE_AUTHKEY", {
+  check("TAILSCALE_AUTHKEY", {
     required: false,
-    desc: "Tailscale node auth key for container join",
+    desc: "Auth key for Tailscale node join (tskey-auth-... or tskey-client-...)",
     validate: (v) => {
-      if (!v.startsWith("tskey-auth-")) return 'Should start with "tskey-auth-"';
-      if (v.length < 40) warnings.push("TAILSCALE_NODE_AUTHKEY: unusually short — double-check the value");
+      if (!v.startsWith("tskey-")) return 'Should start with "tskey-"';
+      if (v.length < 40) warnings.push("TAILSCALE_AUTHKEY: unusually short — double-check the value");
       return null;
     },
   });
 
-  if (!env.TAILSCALE_NODE_AUTHKEY) {
-    warnings.push("TAILSCALE_NODE_AUTHKEY not set — compose will fallback to TAILSCALE_AUTHKEY for node join.");
+  if (!env.TAILSCALE_AUTHKEY) {
+    warnings.push("TAILSCALE_AUTHKEY not set — Tailscale node join may fail on fresh state.");
   }
 
-  check("TAILSCALE_AUTHKEY", {
+  check("TAILSCALE_OAUTH_SECRET", {
     required: false,
-    desc: "OAuth secret for tailscale-init / keep-ip API actions (tskey-client-...)",
+    desc: "Optional OAuth client secret for tailscale-init / keep-ip API actions (tskey-client-...)",
     validate: (v) => {
-      if (!v.startsWith("tskey-")) return 'Should start with "tskey-"';
-      if (!v.startsWith("tskey-client-")) warnings.push('TAILSCALE_AUTHKEY: for OAuth flows, expected "tskey-client-"');
+      if (!v.startsWith("tskey-client-")) return 'Should start with "tskey-client-"';
+      if (v.length < 40) warnings.push("TAILSCALE_OAUTH_SECRET: unusually short — double-check the value");
       return null;
     },
   });
@@ -260,11 +260,14 @@ if (env.ENABLE_TAILSCALE === "true") {
     if (!env.TAILSCALE_CLIENDID && !env.TAILSCALE_CLIENTID) {
       errors.push("TAILSCALE_KEEP_IP_ENABLE=true requires TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID) for OAuth token.");
     }
-    const oauthForKeepIp = (env.TAILSCALE_AUTHKEY || "").trim();
+    const oauthForKeepIp = (env.TAILSCALE_OAUTH_SECRET || env.TAILSCALE_AUTHKEY || "").trim();
+    if (!env.TAILSCALE_OAUTH_SECRET) {
+      warnings.push("TAILSCALE_KEEP_IP_ENABLE=true and TAILSCALE_OAUTH_SECRET is empty — using TAILSCALE_AUTHKEY fallback.");
+    }
     if (!oauthForKeepIp) {
-      errors.push("TAILSCALE_KEEP_IP_ENABLE=true requires TAILSCALE_AUTHKEY for API cleanup.");
+      errors.push("TAILSCALE_KEEP_IP_ENABLE=true requires TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback) for API cleanup.");
     } else if (!oauthForKeepIp.startsWith("tskey-client-")) {
-      errors.push("TAILSCALE_KEEP_IP_ENABLE=true requires TAILSCALE_AUTHKEY format tskey-client-... (OAuth client secret).");
+      errors.push("TAILSCALE_KEEP_IP_ENABLE=true requires OAuth secret format tskey-client-... in TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback).");
     }
   }
 
