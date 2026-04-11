@@ -57,7 +57,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          dotenvrtdb -e .env -- node tailscale/tailscale-init.js --remove-hostname --yes
+          # dotenvrtdb -e .env -- node tailscale/tailscale-init.js --remove-hostname --yes
           bash docker-compose/scripts/dc.sh up -d --build --remove-orphans
 
       - name: Build & start services (Windows/WSL2)
