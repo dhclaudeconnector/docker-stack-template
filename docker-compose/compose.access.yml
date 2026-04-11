@@ -102,7 +102,7 @@ services:
       TS_USERSPACE: "true"
       TS_SERVE_CONFIG: /config/serve/serve.json
       TS_EXTRA_ARGS: >-
-        --advertise-tags="${TAILSCALE_TAGS:-tag:container}"
+        --advertise-tags=${TAILSCALE_TAGS:-tag:container}
         --accept-dns=true
       TS_STATE_DIR: /var/lib/tailscale
     volumes:
