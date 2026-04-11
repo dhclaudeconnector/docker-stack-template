@@ -8,7 +8,7 @@
 //    TAILSCALE_AUTHKEY
 //  Optional:
 //    TS_API_KEY  — Tailscale API key for expiry lookup
-//    TS_TAILNET  — tailnet name (default: "-" for current user's)
+//    TAILSCALE_TS_TAILNET — tailnet name (default: "-" for current user's)
 // ================================================================
 "use strict";
 
@@ -36,7 +36,8 @@ const env = parseEnvFile(path.resolve(process.cwd(), ".env"));
 
 const TAILSCALE_AUTHKEY = process.env.TAILSCALE_AUTHKEY || env.TAILSCALE_AUTHKEY;
 const TS_API_KEY = process.env.TS_API_KEY || env.TS_API_KEY;
-const TS_TAILNET = process.env.TS_TAILNET || env.TS_TAILNET || "-";
+const TAILSCALE_TS_TAILNET =
+  process.env.TAILSCALE_TS_TAILNET || env.TAILSCALE_TS_TAILNET || process.env.TS_TAILNET || env.TS_TAILNET || "-";
 
 const ENABLE_TAILSCALE = env.ENABLE_TAILSCALE;
 
@@ -129,7 +130,7 @@ async function main() {
 
   let res;
   try {
-    res = await tsApiRequest(`/tailnet/${TS_TAILNET}/keys`);
+    res = await tsApiRequest(`/tailnet/${TAILSCALE_TS_TAILNET}/keys`);
   } catch (e) {
     console.warn(`⚠️   Tailscale API unreachable: ${e.message}`);
     process.exit(0);

@@ -22,6 +22,7 @@ services:
     environment:
       TS_AUTHKEY: "${TAILSCALE_AUTHKEY}"
       TS_USERSPACE: "false"
+      TS_SERVE_CONFIG: /config/serve/serve.json
       TS_EXTRA_ARGS: >-
         --advertise-tags=${TAILSCALE_TAGS:-tag:container}
         --accept-dns=true
@@ -29,6 +30,7 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
     volumes:
       - tailscale_data:/var/lib/tailscale
+      - ./tailscale:/config/serve
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - NET_ADMIN
@@ -44,11 +46,13 @@ services:
     environment:
       TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY}"
       TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve/serve.json
       TS_EXTRA_ARGS: >-
         --advertise-tags=${TAILSCALE_TAGS:-tag:container}
         --accept-dns=true
       TS_STATE_DIR: /var/lib/tailscale
     volumes:
       - tailscale_data:/var/lib/tailscale
+      - ./tailscale:/config/serve
     networks: [app_net]
     restart: unless-stopped

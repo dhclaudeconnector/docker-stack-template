@@ -11,6 +11,7 @@ services/webssh/.ssh/
 # ── Generated at runtime ──────────────────────────────────────────
 logs/app/
 logs/*/
+# tailscale/serve.json
 
 # ── Node.js ──────────────────────────────────────────────────────
 node_modules/

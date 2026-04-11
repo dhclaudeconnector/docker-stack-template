@@ -19,7 +19,7 @@
 //      - Comma-separated tags to ensure exist in tagOwners
 //
 //  Optional:
-//    TS_TAILNET                - Tailnet identifier for API calls (default: -)
+//    TAILSCALE_TS_TAILNET      - Tailnet identifier for API calls (default: -)
 //    TAILSCALE_TAG_OWNERS      - Owners for newly created tags (default: autogroup:admin)
 //    TAILSCALE_ACL_JSON_PATH   - Local ACL JSON/HuJSON file to merge tags into
 // ================================================================
@@ -440,7 +440,10 @@ async function main() {
     getEnvValue(envMap, "TAILSCALE_CLIENDID") ||
     process.env.TAILSCALE_CLIENTID ||
     getEnvValue(envMap, "TAILSCALE_CLIENTID");
-  const tailnet = process.env.TS_TAILNET || getEnvValue(envMap, "TS_TAILNET") || "-";
+  const tailnetFromNew =
+    process.env.TAILSCALE_TS_TAILNET || getEnvValue(envMap, "TAILSCALE_TS_TAILNET");
+  const tailnetFromLegacy = process.env.TS_TAILNET || getEnvValue(envMap, "TS_TAILNET");
+  const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
   const existingTailnetDomainRaw = getEnvValue(envMap, "TAILSCALE_TAILNET_DOMAIN");
   const existingTailnetDomain = normalizeTailnetDomain(existingTailnetDomainRaw);
   const aclFilePathRaw = process.env.TAILSCALE_ACL_JSON_PATH || getEnvValue(envMap, "TAILSCALE_ACL_JSON_PATH");
@@ -469,7 +472,11 @@ async function main() {
   }
 
   if (!tailnet) {
-    errors.push("Unable to determine tailnet value (TS_TAILNET).");
+    errors.push("Unable to determine tailnet value (TAILSCALE_TS_TAILNET).");
+  }
+
+  if (!tailnetFromNew && tailnetFromLegacy) {
+    warnings.push("Using deprecated TS_TAILNET. Please migrate to TAILSCALE_TS_TAILNET.");
   }
 
   if (!requiredTags.length) {

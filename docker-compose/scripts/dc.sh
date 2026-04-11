@@ -74,6 +74,60 @@ fi
 # Shared defaults derived from stack identity.
 export TAILSCALE_HTTPS_HOST="${TAILSCALE_HTTPS_HOST:-${STACK_NAME:-mystack}.tailnet.local}"
 
+should_render_tailscale_serve() {
+  case "${1:-}" in
+    ""|up|start|restart|create|run|config|pull)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+render_tailscale_serve_config() {
+  local tailnet_domain app_port serve_dir serve_file
+  tailnet_domain="$(trim "${TAILSCALE_TAILNET_DOMAIN:-}")"
+  app_port="$(trim "${APP_PORT:-3000}")"
+
+  if [ -z "$tailnet_domain" ] || [ "$tailnet_domain" = "-" ]; then
+    echo "❌ ENABLE_TAILSCALE=true nhưng TAILSCALE_TAILNET_DOMAIN chưa có giá trị hợp lệ." >&2
+    echo "   Chạy: npm run tailscale-init (hoặc điền TAILSCALE_TAILNET_DOMAIN trong .env)." >&2
+    exit 1
+  fi
+
+  if ! [[ "$app_port" =~ ^[0-9]+$ ]] || [ "$app_port" -lt 1 ] || [ "$app_port" -gt 65535 ]; then
+    echo "❌ APP_PORT không hợp lệ: $app_port" >&2
+    exit 1
+  fi
+
+  serve_dir="$ROOT_DIR/tailscale"
+  serve_file="$serve_dir/serve.json"
+  mkdir -p "$serve_dir"
+  cat > "$serve_file" <<EOF
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "${tailnet_domain}:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:${app_port}"
+        }
+      }
+    }
+  }
+}
+EOF
+
+  if [ "${DC_VERBOSE:-0}" = "1" ]; then
+    echo "  TS_SERVE  : $serve_file (${tailnet_domain} -> 127.0.0.1:${app_port})"
+  fi
+}
+
 # ── Detect OS (uname-based, not RUNNER_OS) ─────────────────────
 UNAME_S="$(uname -s)"
 UNAME_R="$(uname -r)"
@@ -111,6 +165,10 @@ if [ "${ENABLE_TAILSCALE:-false}" = "true" ]; then
   else
     PROFILE_ARGS+=(--profile tailscale-linux)
   fi
+fi
+
+if [ "${ENABLE_TAILSCALE:-false}" = "true" ] && should_render_tailscale_serve "${1:-}"; then
+  render_tailscale_serve_config
 fi
 
 # ── Compose file list ──────────────────────────────────────────
