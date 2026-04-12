@@ -7,6 +7,7 @@
 - Image local tag: `${STACK_NAME}-app:local`
 - Build context: `./services/app`
 - Port expose localhost: `127.0.0.1:${APP_HOST_PORT}:${APP_PORT}`
+- Logs volume: `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/logs:/app/logs`
 - Healthcheck: `wget http://localhost:${APP_PORT}${HEALTH_PATH}`
 
 ## ENV bắt buộc
@@ -18,6 +19,7 @@
 - `APP_HOST_PORT` (default 3000): chỉ truy cập localhost host machine.
 - `NODE_ENV` (default production).
 - `HEALTH_PATH` (default `/health`).
+- `DOCKER_VOLUMES_ROOT` (default `./.docker-volumes`).
 - `TAILSCALE_TAILNET_DOMAIN`: dùng cho route HTTPS nội bộ qua caddy_1.
 
 ## Routing

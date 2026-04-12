@@ -4,7 +4,7 @@
 #
 #  Profiles:
 #    dozzle         — real-time container log viewer
-#    filebrowser    — web file manager (mounts workspace/logs/.tailsacle)
+#    filebrowser    — web file manager (mounts workspace + .docker-volumes)
 #    webssh-linux   — browser SSH terminal (Linux runner)
 #    webssh-windows — socat bridge to host ttyd (Windows runner)
 #
@@ -20,10 +20,6 @@
 #  Optional bind IP for direct Tailnet access by host ports:
 #    OPS_HOST_BIND_IP=0.0.0.0
 # ================================================================
-
-volumes:
-  filebrowser_data:
-  tailscale_data:
 
 services:
   # ── Dozzle: real-time container logs ──────────────────────────
@@ -52,10 +48,10 @@ services:
     ports:
       - "${OPS_HOST_BIND_IP:-127.0.0.1}:${FILEBROWSER_HOST_PORT:-18081}:80"
     volumes:
-      - .:/srv/workspace # browse toàn bộ project
-      - ./logs:/srv/logs:ro # hoặc nếu chỉ cần xem logs
-      - tailscale_data:/srv/workspace/.tailsacle:ro # toàn bộ /var/lib/tailscale trong workspace
-      - filebrowser_data:/database
+      - .:/srv/workspace # browse all project files
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}:/srv/docker-volumes:ro # all runtime data of services
+      - ./logs:/srv/logs:ro # optional direct logs shortcut
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/filebrowser/database:/database
     labels:
       - "caddy=http://files.${PROJECT_NAME}.${DOMAIN}, http://files.${DOMAIN}"
       - "caddy.reverse_proxy={{upstreams 80}}"

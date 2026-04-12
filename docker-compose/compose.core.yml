@@ -12,10 +12,6 @@ networks:
   app_net:
     name: ${STACK_NAME:-mystack}_net
 
-volumes:
-  caddy_data:
-  caddy_config:
-
 services:
   # ── Caddy: auto reverse proxy via Docker labels ────────────────
   caddy:
@@ -24,8 +20,8 @@ services:
       - "80:80"
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/data:/data
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/config:/config
     environment:
       CADDY_INGRESS_NETWORKS: ${STACK_NAME:-mystack}_net
     labels:

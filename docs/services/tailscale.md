@@ -3,6 +3,7 @@
 ## Vai trò
 - Truy cập riêng tư qua tailnet cho môi trường nội bộ.
 - Kèm cơ chế keep-ip backup/restore state.
+- Toàn bộ state/certs lưu trên host tại `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib`.
 
 ## Kích hoạt
 - `ENABLE_TAILSCALE=true`.
@@ -14,6 +15,7 @@
 - `TAILSCALE_TAILNET_DOMAIN`
 
 ## ENV optional quan trọng
+- `DOCKER_VOLUMES_ROOT` (default `./.docker-volumes`)
 - `TAILSCALE_TAGS` (default `tag:container`)
 - `TAILSCALE_KEEP_IP_ENABLE` (`true|false`)
 - `TAILSCALE_KEEP_IP_FIREBASE_URL` (bắt buộc nếu keep-ip bật)

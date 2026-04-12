@@ -64,6 +64,34 @@ load_env_file() {
   done < "$env_file"
 }
 
+resolve_host_path() {
+  local path="$1"
+  if [[ "$path" = /* ]]; then
+    printf '%s' "$path"
+  elif [[ "$path" =~ ^[A-Za-z]:[\\/].* ]]; then
+    printf '%s' "$path"
+  else
+    path="${path#./}"
+    printf '%s' "$ROOT_DIR/$path"
+  fi
+}
+
+prepare_docker_volume_dirs() {
+  local volume_root
+  volume_root="$(resolve_host_path "${DOCKER_VOLUMES_ROOT:-./.docker-volumes}")"
+
+  mkdir -p \
+    "$volume_root/app/logs" \
+    "$volume_root/caddy/data" \
+    "$volume_root/caddy/config" \
+    "$volume_root/filebrowser/database" \
+    "$volume_root/tailscale/var-lib"
+
+  if [ "${DC_VERBOSE:-0}" = "1" ]; then
+    echo "  DATA_ROOT : $volume_root"
+  fi
+}
+
 # ── Load .env ─────────────────────────────────────────────────────
 if [ -f "$ROOT_DIR/.env" ]; then
   load_env_file "$ROOT_DIR/.env"
@@ -174,6 +202,8 @@ fi
 if [ "${ENABLE_TAILSCALE:-false}" = "true" ] && should_render_tailscale_serve "${1:-}"; then
   render_tailscale_serve_config
 fi
+
+prepare_docker_volume_dirs
 
 # ── Compose file list ──────────────────────────────────────────
 FILES=(

@@ -21,7 +21,7 @@ services:
     ports:
       - "127.0.0.1:${APP_HOST_PORT:-3000}:${APP_PORT:-3000}"
     volumes:
-      - ./logs/app:/app/logs
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/logs:/app/logs
     labels:
       # Public HTTP sites behind Cloudflare Tunnel.
       - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}"

@@ -11,6 +11,8 @@ services/webssh/.ssh/
 # ── Generated at runtime ──────────────────────────────────────────
 logs/app/
 logs/*/
+.docker-volumes/*
+!.docker-volumes/.gitkeep
 # tailscale/serve.json
 
 # ── Node.js ──────────────────────────────────────────────────────

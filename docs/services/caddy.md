@@ -9,8 +9,8 @@
 - Port publish: `80:80`
 - Volumes:
   - Docker socket read-only
-  - `caddy_data:/data`
-  - `caddy_config:/config`
+  - `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/data:/data`
+  - `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/config:/config`
 - Label global:
   - `caddy.email=${CADDY_EMAIL}`
   - `caddy.auto_https=disable_redirects`
@@ -18,6 +18,7 @@
 ## ENV liên quan
 - `CADDY_EMAIL` (**bắt buộc**): email đăng ký cert.
 - `DOCKER_SOCK` (optional): override đường dẫn Docker socket.
+- `DOCKER_VOLUMES_ROOT` (optional): root thư mục runtime data trên host.
 - `STACK_NAME` (**bắt buộc**): dùng để định danh ingress network `${STACK_NAME}_net`.
 
 ## Lưu ý
