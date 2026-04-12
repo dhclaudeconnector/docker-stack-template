@@ -3,14 +3,14 @@
 #  Always included: reverse proxy (Caddy) + tunnel (Cloudflare)
 #
 #  Required env:
-#    STACK_NAME, DOMAIN, CADDY_EMAIL, CADDY_AUTH_USER,
+#    PROJECT_NAME, DOMAIN, CADDY_EMAIL, CADDY_AUTH_USER,
 #    CADDY_AUTH_HASH, CF_TUNNEL_TOKEN (or credentials file)
 # ================================================================
 
 networks:
   # Defined once here for the whole merged stack; overlay files join it by name.
   app_net:
-    name: ${STACK_NAME:-mystack}_net
+    name: ${PROJECT_NAME:-myapp}_net
 
 services:
   # ── Caddy: auto reverse proxy via Docker labels ────────────────
@@ -23,7 +23,7 @@ services:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/data:/data
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/caddy/config:/config
     environment:
-      CADDY_INGRESS_NETWORKS: ${STACK_NAME:-mystack}_net
+      CADDY_INGRESS_NETWORKS: ${PROJECT_NAME:-myapp}_net
     labels:
       caddy.email: "${CADDY_EMAIL}"
       caddy.auto_https: "disable_redirects"

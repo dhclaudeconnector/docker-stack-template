@@ -10,7 +10,7 @@ const crypto = require("crypto");
 // tailscale/tailscale-keep-ip.js
 // Modes:
 //   prepare     - optionally restore tailscaled.state from Firebase (base64),
-//                 restore certs, and/or remove existing machine(s) by STACK_NAME
+//                 restore certs, and/or remove existing machine(s) by PROJECT_NAME
 //   backup-loop - periodically backup tailscaled.state + certs to Firebase
 //
 // Environment:
@@ -20,7 +20,7 @@ const crypto = require("crypto");
 //   TAILSCALE_KEEP_IP_STATE_FILE=/var/lib/tailscale/tailscaled.state
 //   TAILSCALE_KEEP_IP_CERTS_DIR=/var/lib/tailscale/certs
 //   TAILSCALE_KEEP_IP_INTERVAL_SEC=30
-//   STACK_NAME=<hostname to keep>
+//   PROJECT_NAME=<hostname to keep>
 //   TAILSCALE_TS_TAILNET=- (or TS_TAILNET)
 //   TAILSCALE_CLIENDID + (TAILSCALE_OAUTH_SECRET or TAILSCALE_AUTHKEY)
 //
@@ -477,7 +477,7 @@ async function restoreCerts({ firebaseUrl, certsDirPath }) {
 
 async function removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId }) {
   if (!hostname) {
-    console.log("⚠️  remove-hostname: STACK_NAME is empty, skipping.");
+    console.log("⚠️  remove-hostname: PROJECT_NAME is empty, skipping.");
     return;
   }
   if (!oauthSecret || !clientId) {
@@ -561,7 +561,7 @@ async function run() {
   ).trim();
   const intervalSecRaw = (process.env.TAILSCALE_KEEP_IP_INTERVAL_SEC || "30").trim();
   const intervalSec = Number.isInteger(Number(intervalSecRaw)) ? Number(intervalSecRaw) : 30;
-  const hostname = (process.env.STACK_NAME || "").trim();
+  const hostname = (process.env.PROJECT_NAME || "").trim();
   const tailnet = (process.env.TAILSCALE_TS_TAILNET || process.env.TS_TAILNET || "-").trim() || "-";
   const oauthSecret = (process.env.TAILSCALE_OAUTH_SECRET || process.env.TAILSCALE_AUTHKEY || "").trim();
   const clientId = (process.env.TAILSCALE_CLIENDID || process.env.TAILSCALE_CLIENTID || "").trim();

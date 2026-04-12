@@ -24,5 +24,5 @@
 - `ttyd.${PROJECT_NAME}.${DOMAIN}`
 
 ## Truy cập qua Tailscale
-- URL: `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`
+- URL: `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`
 - Cổng host: `WEBSSH_HOST_PORT` (default `17681`).

@@ -120,7 +120,7 @@ render_tailscale_serve_config() {
   local tailnet_domain app_port serve_dir serve_file serve_hostname
   tailnet_domain="$(trim "${TAILSCALE_TAILNET_DOMAIN:-}")"
   app_port="$(trim "${APP_PORT:-3000}")"
-  serve_hostname="${STACK_NAME:-mystack}.${tailnet_domain}"
+  serve_hostname="${PROJECT_NAME:-myapp}.${tailnet_domain}"
 
   if [ -z "$tailnet_domain" ] || [ "$tailnet_domain" = "-" ]; then
     echo "❌ ENABLE_TAILSCALE=true nhưng TAILSCALE_TAILNET_DOMAIN chưa có giá trị hợp lệ." >&2
@@ -217,7 +217,6 @@ FILES=(
 if [ "${DC_VERBOSE:-0}" = "1" ]; then
   echo "── dc.sh debug ──────────────────────────────────"
   echo "  OS        : $_OS"
-  echo "  STACK_NAME: ${STACK_NAME:-mystack}"
   echo "  PROJECT   : ${PROJECT_NAME:-?}"
   echo "  DOMAIN    : ${DOMAIN:-?}"
   echo "  PROFILES  : ${PROFILE_ARGS[*]:-<none>}"
@@ -229,6 +228,6 @@ fi
 exec docker compose \
   "${FILES[@]}" \
   --project-directory "$ROOT_DIR" \
-  --project-name "${STACK_NAME:-mystack}" \
+  --project-name "${PROJECT_NAME:-myapp}" \
   "${PROFILE_ARGS[@]}" \
   "$@"

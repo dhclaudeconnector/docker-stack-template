@@ -98,10 +98,7 @@ function isValidHttpsJsonUrl(v) {
 }
 
 // 1) Required core env from compose files
-checkRequired("STACK_NAME", "docker project/network prefix", (v) =>
-  /^[a-z0-9][a-z0-9-]*$/.test(v) ? null : "only lowercase letters, numbers, hyphen"
-);
-checkRequired("PROJECT_NAME", "subdomain prefix", (v) =>
+checkRequired("PROJECT_NAME", "docker project/network + subdomain prefix", (v) =>
   /^[a-z0-9][a-z0-9-]*$/.test(v) ? null : "only lowercase letters, numbers, hyphen"
 );
 checkRequired("DOMAIN", "root domain", isValidDomain);
@@ -199,7 +196,7 @@ if (env.ENABLE_TAILSCALE === "true") {
 
 const project = env.PROJECT_NAME || "<project>";
 const domain = env.DOMAIN || "<domain>";
-const stack = env.STACK_NAME || "mystack";
+const host = env.PROJECT_NAME || "myapp";
 const tailnet = env.TAILSCALE_TAILNET_DOMAIN || "tailnet.local";
 ok.push(`subdomain preview: app=${project}.${domain}`);
 if ((env.ENABLE_DOZZLE || "true") === "true") ok.push(`subdomain preview: logs=logs.${project}.${domain}`);
@@ -209,10 +206,10 @@ if (env.ENABLE_TAILSCALE === "true") {
   const dozzlePort = env.DOZZLE_HOST_PORT || "18080";
   const filesPort = env.FILEBROWSER_HOST_PORT || "18081";
   const sshPort = env.WEBSSH_HOST_PORT || "17681";
-  ok.push(`tailnet host: https://${stack}.${tailnet}`);
-  if ((env.ENABLE_DOZZLE || "true") === "true") ok.push(`tailnet dozzle: http://${stack}.${tailnet}:${dozzlePort}`);
-  if ((env.ENABLE_FILEBROWSER || "true") === "true") ok.push(`tailnet filebrowser: http://${stack}.${tailnet}:${filesPort}`);
-  if ((env.ENABLE_WEBSSH || "true") === "true") ok.push(`tailnet webssh: http://${stack}.${tailnet}:${sshPort}`);
+  ok.push(`tailnet host: https://${host}.${tailnet}`);
+  if ((env.ENABLE_DOZZLE || "true") === "true") ok.push(`tailnet dozzle: http://${host}.${tailnet}:${dozzlePort}`);
+  if ((env.ENABLE_FILEBROWSER || "true") === "true") ok.push(`tailnet filebrowser: http://${host}.${tailnet}:${filesPort}`);
+  if ((env.ENABLE_WEBSSH || "true") === "true") ok.push(`tailnet webssh: http://${host}.${tailnet}:${sshPort}`);
 }
 
 console.log("\n📋 ENV VALIDATION REPORT");

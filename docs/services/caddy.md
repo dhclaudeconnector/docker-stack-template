@@ -19,7 +19,7 @@
 - `CADDY_EMAIL` (**bắt buộc**): email đăng ký cert.
 - `DOCKER_SOCK` (optional): override đường dẫn Docker socket.
 - `DOCKER_VOLUMES_ROOT` (optional): root thư mục runtime data trên host.
-- `STACK_NAME` (**bắt buộc**): dùng để định danh ingress network `${STACK_NAME}_net`.
+- `PROJECT_NAME` (**bắt buộc**): dùng để định danh ingress network `${PROJECT_NAME}_net`.
 
 ## Lưu ý
 - Public traffic hiện đi qua Cloudflare Tunnel nên upstream từ cloudflared vào Caddy bằng HTTP nội bộ.

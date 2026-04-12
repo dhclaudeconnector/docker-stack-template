@@ -5,7 +5,7 @@
     }
   },
   "Web": {
-    "dockerstack-app.tail21ba49.ts.net:443": {
+    "dockerstack.tail21ba49.ts.net:443": {
       "Handlers": {
         "/": {
           "Proxy": "http://127.0.0.1:80"

@@ -32,9 +32,9 @@
 
 ## Kiểm tra
 - Container tailscale chạy ổn định.
-- Có thể resolve/truy cập `https://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}`.
+- Có thể resolve/truy cập `https://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}`.
 
 ## Hostname + port cho dịch vụ Ops
-- Dozzle: `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}`
-- Filebrowser: `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
-- WebSSH: `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`
+- Dozzle: `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}`
+- Filebrowser: `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
+- WebSSH: `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`

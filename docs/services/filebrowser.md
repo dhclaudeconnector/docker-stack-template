@@ -24,5 +24,5 @@
 - Vì mount toàn bộ project + runtime data nên cần kiểm soát chặt user/password basic auth.
 
 ## Truy cập qua Tailscale
-- URL: `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
+- URL: `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
 - Cổng host: `FILEBROWSER_HOST_PORT` (default `18081`).

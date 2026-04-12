@@ -30,14 +30,6 @@ for (const f of FILES) {
 }
 if (abort) process.exit(1);
 
-// Load .env to get STACK_NAME for project name
-let stackName = 'mystack';
-if (fs.existsSync('.env')) {
-  const raw = fs.readFileSync('.env', 'utf-8');
-  const m = raw.match(/^STACK_NAME\s*=\s*(.+)$/m);
-  if (m) stackName = m[1].trim().replace(/^["']|["']$/g, '');
-}
-
 const fileArgs = FILES.map(f => `-f ${f}`).join(' ');
 const cmd = `bash docker-compose/scripts/dc.sh config --quiet 2>&1`;
 

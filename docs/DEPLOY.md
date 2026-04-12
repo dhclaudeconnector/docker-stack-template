@@ -35,7 +35,6 @@ Tài liệu triển khai chuẩn theo **codebase hiện tại**.
 
 Các biến dưới đây nếu thiếu/sai sẽ **dừng deploy** ở bước validate:
 
-- `STACK_NAME`
 - `PROJECT_NAME`
 - `DOMAIN`
 - `CADDY_EMAIL`
@@ -117,9 +116,9 @@ npm run dockerapp-exec:logs
 
 Khi `ENABLE_TAILSCALE=true`, bạn có thể dùng hostname tailnet của node:
 
-- `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}` → Dozzle
-- `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}` → Filebrowser
-- `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}` → WebSSH
+- `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}` → Dozzle
+- `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}` → Filebrowser
+- `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}` → WebSSH
 
 Ghi chú:
 - Các cổng này bind `127.0.0.1` trên host; truy cập qua tailnet phụ thuộc cách bạn chạy Tailscale (container host-network Linux hay host-level trên Windows/WSL).
@@ -130,7 +129,7 @@ Ghi chú:
 - `docker compose ps` tất cả service expected đều `running`/`healthy`.
 - Truy cập `http(s)://<project>.<domain>` qua tunnel.
 - Kiểm tra endpoint health: `/<HEALTH_PATH>`.
-- Nếu bật Tailscale: truy cập `https://<STACK_NAME>.<TAILSCALE_TAILNET_DOMAIN>`.
+- Nếu bật Tailscale: truy cập `https://<PROJECT_NAME>.<TAILSCALE_TAILNET_DOMAIN>`.
 
 ## 9) Tài liệu từng dịch vụ
 

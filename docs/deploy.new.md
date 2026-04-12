@@ -67,7 +67,7 @@ Ghi chu:
 - Tao san thu muc van nen lam neu can set quyen truy cap chi tiet.
 
 Neu nang cap tu template cu (dang dung named volume):
-- Cac volume cu (`<stack>_caddy_data`, `<stack>_caddy_config`, `<stack>_tailscale_data`, `<stack>_filebrowser_data`) se khong duoc mount nua.
+- Cac volume cu (`<project>_caddy_data`, `<project>_caddy_config`, `<project>_tailscale_data`, `<project>_filebrowser_data`) se khong duoc mount nua.
 - Can migrate data sang `.docker-volumes/...` truoc khi cleanup named volume cu.
 
 PowerShell:
@@ -85,7 +85,6 @@ New-Item -ItemType Directory -Force `
 
 Toi thieu:
 
-- `STACK_NAME`
 - `PROJECT_NAME`
 - `DOMAIN`
 - `CADDY_EMAIL`
@@ -142,9 +141,9 @@ npm run dockerapp-exec:logs
 - Tailnet host noi bo truy cap duoc.
 - Keep-ip logs khong bao loi Firebase/API.
 - Truy cap ops bang hostname+port qua tailnet:
-  - `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}`
-  - `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
-  - `http://${STACK_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`
+  - `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${DOZZLE_HOST_PORT:-18080}`
+  - `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${FILEBROWSER_HOST_PORT:-18081}`
+  - `http://${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}:${WEBSSH_HOST_PORT:-17681}`
 
 ## Tong ket diem can doi khi thay dich vu
 

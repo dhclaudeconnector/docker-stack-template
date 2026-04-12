@@ -25,7 +25,7 @@
 //      - Comma-separated tags to ensure exist in tagOwners
 //
 //  Required for --remove-hostname flow:
-//    STACK_NAME
+//    PROJECT_NAME
 //      - Device hostname to remove from tailnet
 //
 //  Optional:
@@ -548,7 +548,7 @@ async function main() {
   const tailnetFromNew = inputValue("TAILSCALE_TS_TAILNET");
   const tailnetFromLegacy = inputValue("TS_TAILNET");
   const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
-  const stackName = inputValue("STACK_NAME").trim();
+  const projectName = inputValue("PROJECT_NAME").trim();
   const existingTailnetDomainRaw = inputValue("TAILSCALE_TAILNET_DOMAIN");
   const existingTailnetDomain = normalizeTailnetDomain(existingTailnetDomainRaw);
   const aclFilePathRaw = inputValue("TAILSCALE_ACL_JSON_PATH");
@@ -590,12 +590,12 @@ async function main() {
   }
 
   if (removeHostnameMode) {
-    if (!stackName) {
-      errors.push("Missing STACK_NAME. --remove-hostname requires STACK_NAME in process.env or .env.");
+    if (!projectName) {
+      errors.push("Missing PROJECT_NAME. --remove-hostname requires PROJECT_NAME in process.env or .env.");
     }
   } else {
-    if (!stackName) {
-      errors.push("Missing STACK_NAME. Required to generate tailscale serve hostname.");
+    if (!projectName) {
+      errors.push("Missing PROJECT_NAME. Required to generate tailscale serve hostname.");
     }
     if (!requiredTags.length) {
       errors.push("TAILSCALE_TAGS is empty or invalid. Provide one or more tags (example: tag:ci,tag:container).");
@@ -619,7 +619,7 @@ async function main() {
   console.log(`    Env file : ${envPathDisplay}`);
   console.log(`    Tailnet  : ${tailnet}`);
   if (removeHostnameMode) {
-    console.log(`    Hostname : ${stackName}\n`);
+    console.log(`    Hostname : ${projectName}\n`);
   } else {
     console.log(`    Tags(env): ${requiredTags.join(", ")}\n`);
   }
@@ -689,18 +689,18 @@ async function main() {
       process.exit(1);
     }
 
-    const targetHostname = normalizeHostLabel(stackName);
+    const targetHostname = normalizeHostLabel(projectName);
     const matchedDevices = devices.filter((device) => collectDeviceHostCandidates(device).includes(targetHostname));
 
     if (!matchedDevices.length) {
-      console.log(`✅  No device matched hostname "${stackName}". Nothing to remove.`);
+      console.log(`✅  No device matched hostname "${projectName}". Nothing to remove.`);
       if (warnings.length) printList("⚠️   Warnings:", warnings);
       console.log();
       process.exit(0);
     }
 
     console.log("Planned changes:");
-    console.log(`  - Remove ${matchedDevices.length} device(s) matching hostname "${stackName}":`);
+    console.log(`  - Remove ${matchedDevices.length} device(s) matching hostname "${projectName}":`);
     matchedDevices.forEach((device) => {
       console.log(`      - ${formatDeviceForLog(device)}`);
     });
@@ -779,7 +779,7 @@ async function main() {
       process.exit(1);
     }
 
-    console.log(`\n✅  Removed ${removedCount} device(s) matching hostname "${stackName}".\n`);
+    console.log(`\n✅  Removed ${removedCount} device(s) matching hostname "${projectName}".\n`);
     process.exit(0);
   }
 
@@ -979,7 +979,7 @@ async function main() {
     });
   }
 
-  const serveHostname = `${stackName}.${apiTailnetDomain}`;
+  const serveHostname = `${projectName}.${apiTailnetDomain}`;
   const servePathResolved = path.resolve(process.cwd(), serveFilePathRaw);
   let serveFileExists = fs.existsSync(servePathResolved);
   let serveFileCurrentText = "";
