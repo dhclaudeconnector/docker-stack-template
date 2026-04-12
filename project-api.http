@@ -18,9 +18,7 @@
 @app_local = http://localhost:{{app_host_port}}
 @caddy_local = http://localhost
 @host_main = main.{{domain}}
-@host_project = {{project_name}}.{{domain}}
 @public_main = https://{{host_main}}
-@public_project = https://{{host_project}}
 @tailscale_magicdns_host = {{stack_name}}.{{tailscale_tailnet_domain}}
 @tailscale_magicdns_https = https://{{tailscale_magicdns_host}}
 @tailscale_magicdns_http = http://{{tailscale_magicdns_host}}
@@ -52,13 +50,6 @@ Accept: application/json
 Authorization: Basic {{basic_auth}}
 
 ###
-# Through local Caddy using the project hostname alias
-GET {{caddy_local}}/
-Host: {{host_project}}
-Accept: application/json
-Authorization: Basic {{basic_auth}}
-
-###
 # Public domain through Cloudflare Tunnel
 GET {{public_main}}/
 Accept: application/json
@@ -66,12 +57,6 @@ Authorization: Basic {{basic_auth}}
 
 ###
 GET {{public_main}}{{health_path}}
-Accept: application/json
-Authorization: Basic {{basic_auth}}
-
-###
-# Public project hostname alias
-GET {{public_project}}/
 Accept: application/json
 Authorization: Basic {{basic_auth}}
 
