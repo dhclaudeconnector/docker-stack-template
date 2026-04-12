@@ -12,6 +12,7 @@
     "dockerapp-validate:compose": "node docker-compose/scripts/validate-compose.js",
     "dockerapp-validate:ts": "node docker-compose/scripts/validate-ts.js",
     "dockerapp-validate:all": "npm run dockerapp-validate:env && npm run dockerapp-validate:compose && npm run dockerapp-validate:ts",
+    "agent-app-swap:sync": "node scripts/sync-agent-app-swap.js",
     "tailscale-init": "node tailscale/tailscale-init.js .env",
     "tailscale-remove-hostname": "node tailscale/tailscale-init.js .env --remove-hostname --yes",
     "dockerapp-gen:👇👇👇👇👇": "==dockerapp-gen==",

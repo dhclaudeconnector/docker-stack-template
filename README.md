@@ -11,6 +11,8 @@ Tài liệu chính đã được chuẩn hoá theo codebase hiện tại:
 - Hướng dẫn triển khai tổng quát: `deploy.md`
 - Hướng dẫn thay thế app/service mới: `deploy.new.md`
 - Tài liệu chi tiết từng dịch vụ (mỗi dịch vụ 1 file): thư mục `docs/services/`
+- One-file handoff cho coding agent khi thay app: `AGENT_APP_SWAP.md`
+- Sync embedded files into agent handoff: `npm run agent-app-swap:sync`
 
 ## Cấu trúc compose
 
