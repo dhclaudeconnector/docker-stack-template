@@ -58,8 +58,8 @@ Nếu `TAILSCALE_KEEP_IP_ENABLE=true`, bắt buộc thêm:
 
 Nếu `TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=true`, bắt buộc thêm:
 
-- `TAILSCALE_CLIENTID` (hoặc `TAILSCALE_CLIENDID` theo tương thích cũ)
-- `TAILSCALE_OAUTH_SECRET` (hoặc fallback `TAILSCALE_AUTHKEY`) và phải theo format `tskey-client-...`
+- `TAILSCALE_CLIENTID`
+- `TAILSCALE_AUTHKEY` theo format `tskey-client-...`
 
 ## 4) Các env optional nhưng nên cấu hình
 

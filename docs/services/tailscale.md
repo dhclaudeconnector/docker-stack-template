@@ -22,8 +22,8 @@
 - `TAILSCALE_KEEP_IP_CERTS_DIR` (default `/var/lib/tailscale/certs`)
 - `TAILSCALE_KEEP_IP_INTERVAL_SEC` (default 30)
 - `TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE`
-- `TAILSCALE_CLIENTID` hoặc `TAILSCALE_CLIENDID`
-- `TAILSCALE_OAUTH_SECRET` (ưu tiên) hoặc fallback `TAILSCALE_AUTHKEY` cho API call.
+- `TAILSCALE_CLIENTID`
+- `TAILSCALE_AUTHKEY` (dùng cho join tailnet + API token flow)
 
 ## Keep-IP logic
 - `prepare`: khôi phục state/certs trước khi daemon chạy.

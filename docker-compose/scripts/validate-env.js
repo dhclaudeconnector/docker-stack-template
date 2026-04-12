@@ -182,14 +182,14 @@ if (env.ENABLE_TAILSCALE === "true") {
 
   const removeHostnameEnabled = keepRemove ? keepRemove === "true" : keepIp === "true";
   if (removeHostnameEnabled) {
-    if (!env.TAILSCALE_CLIENTID && !env.TAILSCALE_CLIENDID) {
-      errors.push("remove-hostname enabled requires TAILSCALE_CLIENTID (or legacy TAILSCALE_CLIENDID)");
+    if (!env.TAILSCALE_CLIENTID) {
+      errors.push("remove-hostname enabled requires TAILSCALE_CLIENTID");
     }
-    const secret = (env.TAILSCALE_OAUTH_SECRET || env.TAILSCALE_AUTHKEY || "").trim();
-    if (!secret) {
-      errors.push("remove-hostname enabled requires TAILSCALE_OAUTH_SECRET (or fallback TAILSCALE_AUTHKEY)");
-    } else if (!secret.startsWith("tskey-client-")) {
-      errors.push("remove-hostname requires tskey-client-* secret");
+    const authKey = (env.TAILSCALE_AUTHKEY || "").trim();
+    if (!authKey) {
+      errors.push("remove-hostname enabled requires TAILSCALE_AUTHKEY");
+    } else if (!authKey.startsWith("tskey-client-")) {
+      errors.push("remove-hostname requires TAILSCALE_AUTHKEY in tskey-client-* format");
     }
   }
 }

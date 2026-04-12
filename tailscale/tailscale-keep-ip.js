@@ -22,7 +22,7 @@ const crypto = require("crypto");
 //   TAILSCALE_KEEP_IP_INTERVAL_SEC=30
 //   PROJECT_NAME=<hostname to keep>
 //   TAILSCALE_TS_TAILNET=- (or TS_TAILNET)
-//   TAILSCALE_CLIENDID + (TAILSCALE_OAUTH_SECRET or TAILSCALE_AUTHKEY)
+//   TAILSCALE_CLIENTID + TAILSCALE_AUTHKEY
 //
 // Firebase keys (under the same base URL):
 //   - state: tailscaled.state payload
@@ -475,19 +475,19 @@ async function restoreCerts({ firebaseUrl, certsDirPath }) {
   return true;
 }
 
-async function removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId }) {
+async function removeHostnameFromTailnet({ hostname, tailnet, clientSecret, clientId }) {
   if (!hostname) {
     console.log("⚠️  remove-hostname: PROJECT_NAME is empty, skipping.");
     return;
   }
-  if (!oauthSecret || !clientId) {
-    console.log("⚠️  remove-hostname: missing OAuth secret or TAILSCALE_CLIENDID, skipping.");
+  if (!clientSecret || !clientId) {
+    console.log("⚠️  remove-hostname: missing TAILSCALE_AUTHKEY or TAILSCALE_CLIENTID, skipping.");
     return;
   }
 
   let accessToken = "";
   try {
-    const tokenRes = await getOAuthAccessToken(clientId, oauthSecret);
+    const tokenRes = await getOAuthAccessToken(clientId, clientSecret);
     if (tokenRes.status === 200 && tokenRes.body && tokenRes.body.access_token) {
       accessToken = tokenRes.body.access_token;
     } else {
@@ -563,8 +563,8 @@ async function run() {
   const intervalSec = Number.isInteger(Number(intervalSecRaw)) ? Number(intervalSecRaw) : 30;
   const hostname = (process.env.PROJECT_NAME || "").trim();
   const tailnet = (process.env.TAILSCALE_TS_TAILNET || process.env.TS_TAILNET || "-").trim() || "-";
-  const oauthSecret = (process.env.TAILSCALE_OAUTH_SECRET || process.env.TAILSCALE_AUTHKEY || "").trim();
-  const clientId = (process.env.TAILSCALE_CLIENDID || process.env.TAILSCALE_CLIENTID || "").trim();
+  const clientSecret = (process.env.TAILSCALE_AUTHKEY || "").trim();
+  const clientId = (process.env.TAILSCALE_CLIENTID || "").trim();
   const hasFirebaseUrl = isLikelyFirebaseUrl(firebaseUrl);
   const firebaseStateUrl = hasFirebaseUrl ? firebaseChildUrl(firebaseUrl, "state") : "";
   const firebaseCertsUrl = hasFirebaseUrl ? firebaseChildUrl(firebaseUrl, "certs") : "";
@@ -618,7 +618,7 @@ async function run() {
     }
 
     if (removeHostnameEnabled) {
-      await removeHostnameFromTailnet({ hostname, tailnet, oauthSecret, clientId });
+      await removeHostnameFromTailnet({ hostname, tailnet, clientSecret, clientId });
     } else {
       console.log("ℹ️  prepare: remove-hostname disabled by TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE=false.");
     }

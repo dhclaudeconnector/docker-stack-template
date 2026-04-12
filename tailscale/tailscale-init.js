@@ -15,9 +15,9 @@
 //    node tailscale/tailscale-init.js .env --remove-hostname --yes
 //
 //  Required in target .env (or process env):
-//    TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID)
+//    TAILSCALE_CLIENTID
 //      - OAuth client ID (for example: kFhHFn4CBE11CNTRL)
-//    TAILSCALE_OAUTH_SECRET (or fallback TAILSCALE_AUTHKEY)
+//    TAILSCALE_AUTHKEY
 //      - OAuth client secret (tskey-client-...)
 //
 //  Required for default init flow:
@@ -540,11 +540,8 @@ async function main() {
   const errors = [];
   const inputValue = (key) => process.env[key] || getEnvValue(envMap, key);
 
-  const tailscaleOAuthSecretFromEnv = inputValue("TAILSCALE_OAUTH_SECRET");
-  const tailscaleOAuthSecret = tailscaleOAuthSecretFromEnv || inputValue("TAILSCALE_AUTHKEY");
-  const tailscaleClientId =
-    inputValue("TAILSCALE_CLIENDID") ||
-    inputValue("TAILSCALE_CLIENTID");
+  const tailscaleAuthKey = inputValue("TAILSCALE_AUTHKEY").trim();
+  const tailscaleClientId = inputValue("TAILSCALE_CLIENTID").trim();
   const tailnetFromNew = inputValue("TAILSCALE_TS_TAILNET");
   const tailnetFromLegacy = inputValue("TS_TAILNET");
   const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
@@ -562,23 +559,17 @@ async function main() {
   const defaultOwnersRaw = parseCsv(inputValue("TAILSCALE_TAG_OWNERS") || "autogroup:admin");
   const defaultOwners = uniqueStable(defaultOwnersRaw.filter(Boolean));
 
-  if (!tailscaleOAuthSecret) {
-    errors.push("Missing TAILSCALE_OAUTH_SECRET (or TAILSCALE_AUTHKEY fallback).");
-  } else if (!tailscaleOAuthSecret.startsWith("tskey-client-")) {
-    warnings.push("OAuth secret should be tskey-client-... for tailscale-init.");
-  }
-  if (!tailscaleOAuthSecretFromEnv && inputValue("TAILSCALE_AUTHKEY")) {
-    warnings.push("Using fallback TAILSCALE_AUTHKEY as OAuth secret. Set TAILSCALE_OAUTH_SECRET to separate concerns.");
+  if (!tailscaleAuthKey) {
+    errors.push("Missing TAILSCALE_AUTHKEY.");
+  } else if (!tailscaleAuthKey.startsWith("tskey-client-")) {
+    warnings.push("TAILSCALE_AUTHKEY should be tskey-client-... for tailscale-init API flow.");
   }
 
   if (!tailscaleClientId) {
-    errors.push("Missing TAILSCALE_CLIENDID (or TAILSCALE_CLIENTID).");
-  }
-  if (inputValue("TAILSCALE_CLIENTID") && !inputValue("TAILSCALE_CLIENDID")) {
-    warnings.push("Using fallback TAILSCALE_CLIENTID. Recommended key for this project is TAILSCALE_CLIENDID.");
+    errors.push("Missing TAILSCALE_CLIENTID.");
   }
   if (tailscaleClientId && !/^[A-Za-z0-9]+$/.test(tailscaleClientId)) {
-    warnings.push(`TAILSCALE_CLIENDID contains unusual characters: ${tailscaleClientId}`);
+    warnings.push(`TAILSCALE_CLIENTID contains unusual characters: ${tailscaleClientId}`);
   }
 
   if (!tailnet) {
@@ -634,13 +625,13 @@ async function main() {
 
   let accessToken = "";
   try {
-    const tokenRes = await getOAuthAccessToken(tailscaleClientId, tailscaleOAuthSecret);
+    const tokenRes = await getOAuthAccessToken(tailscaleClientId, tailscaleAuthKey);
     if (tokenRes.status === 200 && tokenRes.body && tokenRes.body.access_token) {
       accessToken = tokenRes.body.access_token;
     } else if (tokenRes.status === 400) {
-      errors.push("OAuth token request failed (400). Check TAILSCALE_CLIENDID + TAILSCALE_OAUTH_SECRET/TAILSCALE_AUTHKEY format.");
+      errors.push("OAuth token request failed (400). Check TAILSCALE_CLIENTID + TAILSCALE_AUTHKEY format.");
     } else if (tokenRes.status === 401 || tokenRes.status === 403) {
-      errors.push("OAuth token request was unauthorized. Verify TAILSCALE_CLIENDID + TAILSCALE_OAUTH_SECRET/TAILSCALE_AUTHKEY.");
+      errors.push("OAuth token request was unauthorized. Verify TAILSCALE_CLIENTID + TAILSCALE_AUTHKEY.");
     } else {
       errors.push(`OAuth token request failed: HTTP ${tokenRes.status}.`);
     }
