@@ -97,6 +97,15 @@ function isValidHttpsJsonUrl(v) {
   }
 }
 
+function buildAppHost(project, domain) {
+  const p = (project || "").trim().toLowerCase();
+  const d = (domain || "").trim().toLowerCase();
+  if (p && d && (d === p || d.startsWith(`${p}.`))) {
+    return domain;
+  }
+  return `${project}.${domain}`;
+}
+
 // 1) Required core env from compose files
 checkRequired("PROJECT_NAME", "docker project/network + subdomain prefix", (v) =>
   /^[a-z0-9][a-z0-9-]*$/.test(v) ? null : "only lowercase letters, numbers, hyphen"
@@ -198,10 +207,11 @@ const project = env.PROJECT_NAME || "<project>";
 const domain = env.DOMAIN || "<domain>";
 const host = env.PROJECT_NAME || "myapp";
 const tailnet = env.TAILSCALE_TAILNET_DOMAIN || "tailnet.local";
-ok.push(`subdomain preview: app=${project}.${domain}`);
-if ((env.ENABLE_DOZZLE || "true") === "true") ok.push(`subdomain preview: logs=logs.${project}.${domain}`);
-if ((env.ENABLE_FILEBROWSER || "true") === "true") ok.push(`subdomain preview: files=files.${project}.${domain}`);
-if ((env.ENABLE_WEBSSH || "true") === "true") ok.push(`subdomain preview: ttyd=ttyd.${project}.${domain}`);
+const appHost = buildAppHost(project, domain);
+ok.push(`subdomain preview: app=${appHost}`);
+if ((env.ENABLE_DOZZLE || "true") === "true") ok.push(`subdomain preview: logs=logs.${appHost}`);
+if ((env.ENABLE_FILEBROWSER || "true") === "true") ok.push(`subdomain preview: files=files.${appHost}`);
+if ((env.ENABLE_WEBSSH || "true") === "true") ok.push(`subdomain preview: ttyd=ttyd.${appHost}`);
 if (env.ENABLE_TAILSCALE === "true") {
   const dozzlePort = env.DOZZLE_HOST_PORT || "18080";
   const filesPort = env.FILEBROWSER_HOST_PORT || "18081";
