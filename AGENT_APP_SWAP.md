@@ -101,7 +101,7 @@ Plus:
 - `DIRECTORY_STRUCTURE` snapshot (tree, depth-limited)
 
 <!-- BEGIN:EMBEDDED_FILES -->
-Generated at: 2026-04-13T02:45:21.223Z
+Generated at: 2026-04-13T04:04:19.497Z
 Use this snapshot as direct editing context.
 
 ### `DIRECTORY_STRUCTURE`
