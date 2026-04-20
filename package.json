@@ -61,6 +61,7 @@
     "env-push": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env --push -eUrl=$env:DOTENVRTDB_URL'\"",
     "env-pull.local": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env -- dotenvrtdb -e .env.local --pull -eUrl=$env:DOTENVRTDB_URL'",
     "stack:clone": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-omniroute --name dockerstack-omniroute --force",
-    "stack:clone-dockerstack-s3-proxy": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-s3-proxy --name dockerstack-s3-proxy --force"
+    "stack:clone-dockerstack-s3-proxy": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-s3-proxy --name dockerstack-s3-proxy --force",
+    "stack:clone-dockerstack-pocketbase": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-pocketbase --name dockerstack-pocketbase --force"
   }
 }

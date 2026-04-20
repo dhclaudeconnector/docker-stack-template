@@ -57,6 +57,62 @@ function shortHostnameFromValue(value) {
   return first || v;
 }
 
+function trimLeadingTrailingDots(value) {
+  return String(value || "")
+    .replace(/^\.+/, "")
+    .replace(/\.+$/, "");
+}
+
+function ensureServeConfigFileFromEnv() {
+  // Template to keep in code so we can tweak structure later without touching replacement logic.
+  const serveConfigTemplate = {
+    TCP: {
+      443: {
+        HTTPS: true,
+      },
+    },
+    Web: {
+      "dockerstacks3proxy.tail03fb4e.ts.net:443": {
+        Handlers: {
+          "/": {
+            Proxy: "http://127.0.0.1:80",
+          },
+        },
+      },
+    },
+  };
+
+  const projectName = trimLeadingTrailingDots(
+    normalizeHostLabel((process.env.PROJECT_NAME_TAILSCALE || process.env.PROJECT_NAME || "dockerstacks3proxy").trim()),
+  );
+  const tailnetDomain = trimLeadingTrailingDots(normalizeHostLabel((process.env.TAILSCALE_TAILNET_DOMAIN || "").trim()));
+  if (!tailnetDomain) {
+    console.log("⚠️  serve-config: TAILSCALE_TAILNET_DOMAIN is empty, skip writing tailscale/serve.json.");
+    return;
+  }
+  const fqdn = [projectName, tailnetDomain].filter(Boolean).join(".");
+  const webHostKey = `${fqdn}:443`;
+  const templateWebEntry = Object.values(serveConfigTemplate.Web)[0];
+
+  const serveConfig = {
+    ...serveConfigTemplate,
+    Web: {
+      [webHostKey]: templateWebEntry,
+    },
+  };
+
+  const serveJsonPath = path.join(__dirname, "serve.json");
+  fs.mkdirSync(path.dirname(serveJsonPath), { recursive: true });
+  try {
+    fs.writeFileSync(serveJsonPath, `${JSON.stringify(serveConfig, null, 2)}\n`, "utf-8");
+    console.log(`✅  serve-config: wrote ${serveJsonPath} (${webHostKey})`);
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? err.code : "WRITE_FAILED";
+    const message = err && typeof err === "object" && "message" in err ? err.message : String(err);
+    console.log(`⚠️  serve-config: cannot write ${serveJsonPath} (${code}: ${message}), continuing.`);
+  }
+}
+
 function pickDeviceId(device) {
   if (!device || typeof device !== "object") return "";
   return String(device.nodeId || device.id || device.deviceId || "").trim();
@@ -64,14 +120,7 @@ function pickDeviceId(device) {
 
 function collectDeviceHostCandidates(device) {
   if (!device || typeof device !== "object") return [];
-  const values = [
-    device.hostname,
-    device.name,
-    device.computedName,
-    device.givenName,
-    device.machineName,
-    device.dnsName,
-  ];
+  const values = [device.hostname, device.name, device.computedName, device.givenName, device.machineName, device.dnsName];
 
   const out = new Set();
   for (const raw of values) {
@@ -202,7 +251,9 @@ function isLikelyFirebaseUrl(url) {
 function firebaseChildUrl(firebaseUrl, childKey) {
   if (!isLikelyFirebaseUrl(firebaseUrl)) return "";
   const parsed = new URL(firebaseUrl);
-  const cleanedChild = String(childKey || "").trim().replace(/[^A-Za-z0-9_-]/g, "");
+  const cleanedChild = String(childKey || "")
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "");
   if (!cleanedChild) return firebaseUrl;
   parsed.pathname = parsed.pathname.replace(/\.json$/, `/${cleanedChild}.json`);
   return parsed.toString();
@@ -278,14 +329,7 @@ function looksLikeTailscaleState(buffer) {
   return text.includes("_machinekey") || text.includes("_profiles") || text.includes("profile-");
 }
 
-async function backupState({
-  firebaseUrl,
-  stateFilePath,
-  hostname,
-  tailnet,
-  modeLabel,
-  lastHashRef,
-}) {
+async function backupState({ firebaseUrl, stateFilePath, hostname, tailnet, modeLabel, lastHashRef }) {
   const stateBuffer = readStateFile(stateFilePath);
   if (!stateBuffer || stateBuffer.length === 0) {
     console.log(`ℹ️  ${modeLabel}: state file not found yet: ${stateFilePath}`);
@@ -368,14 +412,7 @@ async function restoreState({ firebaseUrl, stateFilePath }) {
   return true;
 }
 
-async function backupCerts({
-  firebaseUrl,
-  certsDirPath,
-  hostname,
-  tailnet,
-  modeLabel,
-  lastHashRef,
-}) {
+async function backupCerts({ firebaseUrl, certsDirPath, hostname, tailnet, modeLabel, lastHashRef }) {
   const files = collectFilesRecursive(certsDirPath);
   if (!files.length) {
     if (lastHashRef.value !== "__EMPTY__") {
@@ -417,9 +454,7 @@ async function backupCerts({
   }
 
   lastHashRef.value = hash;
-  console.log(
-    `✅  ${modeLabel}: uploaded certs (${payload.fileCount} files, ${payload.sizeBytes} bytes, sha256=${hash.slice(0, 12)}...)`,
-  );
+  console.log(`✅  ${modeLabel}: uploaded certs (${payload.fileCount} files, ${payload.sizeBytes} bytes, sha256=${hash.slice(0, 12)}...)`);
   return true;
 }
 
@@ -511,11 +546,7 @@ async function removeHostnameFromTailnet({ hostname, tailnet, clientSecret, clie
     return;
   }
 
-  const devices = Array.isArray(devicesRes.body?.devices)
-    ? devicesRes.body.devices
-    : Array.isArray(devicesRes.body)
-      ? devicesRes.body
-      : [];
+  const devices = Array.isArray(devicesRes.body?.devices) ? devicesRes.body.devices : Array.isArray(devicesRes.body) ? devicesRes.body : [];
 
   const target = normalizeHostLabel(hostname);
   const matched = devices.filter((d) => collectDeviceHostCandidates(d).includes(target));
@@ -546,19 +577,15 @@ async function removeHostnameFromTailnet({ hostname, tailnet, clientSecret, clie
 }
 
 async function run() {
+  ensureServeConfigFileFromEnv();
+
   const mode = (process.argv[2] || "prepare").trim().toLowerCase();
   const keepIpEnabled = toBool(process.env.TAILSCALE_KEEP_IP_ENABLE, false);
-  const removeHostnameEnabled = toBool(
-    process.env.TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE,
-    keepIpEnabled,
-  );
+  const removeHostnameEnabled = toBool(process.env.TAILSCALE_KEEP_IP_REMOVE_HOSTNAME_ENABLE, keepIpEnabled);
 
   const firebaseUrl = (process.env.TAILSCALE_KEEP_IP_FIREBASE_URL || "").trim();
   const stateFilePath = (process.env.TAILSCALE_KEEP_IP_STATE_FILE || "/var/lib/tailscale/tailscaled.state").trim();
-  const certsDirPath = (
-    process.env.TAILSCALE_KEEP_IP_CERTS_DIR ||
-    path.join(path.dirname(stateFilePath), "certs")
-  ).trim();
+  const certsDirPath = (process.env.TAILSCALE_KEEP_IP_CERTS_DIR || path.join(path.dirname(stateFilePath), "certs")).trim();
   const intervalSecRaw = (process.env.TAILSCALE_KEEP_IP_INTERVAL_SEC || "30").trim();
   const intervalSec = Number.isInteger(Number(intervalSecRaw)) ? Number(intervalSecRaw) : 30;
   const hostname = (process.env.PROJECT_NAME || "").trim();

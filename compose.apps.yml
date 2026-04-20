@@ -15,6 +15,9 @@ services:
     build:
       context: ./services/app
       dockerfile: Dockerfile
+    # Compose vẫn ưu tiên giá trị khai báo explicit trong environment bên dưới.
+    env_file:
+      - ./.env
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
       PORT: "${APP_PORT:-3000}"
