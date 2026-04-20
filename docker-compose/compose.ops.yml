@@ -25,7 +25,7 @@ services:
   # ── Dozzle: real-time container logs ──────────────────────────
   dozzle:
     profiles: [dozzle]
-    image: amir20/dozzle:latest
+    image: amir20/dozzle:v10.3.3
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     environment:

@@ -1,2 +1,4 @@
-FROM tsl0922/ttyd:latest
-RUN apt-get update && apt-get install -y --no-install-recommends openssh-client && rm -rf /var/lib/apt/lists/*
+# Alpine-based ttyd image to keep webssh rebuilds lightweight.
+FROM tsl0922/ttyd:1.7.8-alpine
+
+RUN apk add --no-cache openssh-client-default

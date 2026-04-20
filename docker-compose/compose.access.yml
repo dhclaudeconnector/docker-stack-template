@@ -30,14 +30,14 @@ services:
       TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
       TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
       TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
       TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
       TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
     user: "0:0"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
-      - ./tailscale:/workspace/tailscale:ro
+      - ./tailscale:/workspace/tailscale
     networks: [app_net]
     restart: "no"
 
@@ -55,14 +55,14 @@ services:
       TAILSCALE_KEEP_IP_FIREBASE_URL: "${TAILSCALE_KEEP_IP_FIREBASE_URL:-}"
       TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
       TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
       TAILSCALE_AUTHKEY: "${TAILSCALE_AUTHKEY:-}"
       TAILSCALE_CLIENTID: "${TAILSCALE_CLIENTID:-}"
     user: "0:0"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
-      - ./tailscale:/workspace/tailscale:ro
+      - ./tailscale:/workspace/tailscale
     networks: [app_net]
     restart: "no"
 
@@ -70,7 +70,7 @@ services:
   tailscale-linux:
     profiles: [tailscale-linux]
     image: tailscale/tailscale:stable
-    hostname: ${PROJECT_NAME:-myapp}
+    hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
     depends_on:
       tailscale-keep-ip-prepare-linux:
         condition: service_completed_successfully
@@ -102,7 +102,7 @@ services:
   tailscale-windows:
     profiles: [tailscale-windows]
     image: tailscale/tailscale:stable
-    hostname: ${PROJECT_NAME:-myapp}
+    hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
     depends_on:
       tailscale-keep-ip-prepare-windows:
         condition: service_completed_successfully
@@ -152,7 +152,7 @@ services:
       TAILSCALE_WATCHDOG_AUTO_RECONNECT: "true"
       TAILSCALE_WATCHDOG_DNS_FIX: "false"
       TAILSCALE_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
     user: "0:0"
     volumes:
       - ./tailscale:/workspace/tailscale:ro
@@ -187,7 +187,7 @@ services:
       TAILSCALE_WATCHDOG_AUTO_RECONNECT: "true"
       TAILSCALE_WATCHDOG_DNS_FIX: "false"
       TAILSCALE_SOCKET: "${TAILSCALE_SOCKET:-/tmp/tailscaled.sock}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
     user: "0:0"
     volumes:
       - ./tailscale:/workspace/tailscale:ro
@@ -212,12 +212,12 @@ services:
       TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
       TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
       TAILSCALE_KEEP_IP_INTERVAL_SEC: "${TAILSCALE_KEEP_IP_INTERVAL_SEC:-30}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
     user: "0:0"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
-      - ./tailscale:/workspace/tailscale:ro
+      - ./tailscale:/workspace/tailscale
     networks: [app_net]
     restart: unless-stopped
 
@@ -238,12 +238,12 @@ services:
       TAILSCALE_KEEP_IP_STATE_FILE: /var/lib/tailscale/tailscaled.state
       TAILSCALE_KEEP_IP_CERTS_DIR: "${TAILSCALE_KEEP_IP_CERTS_DIR:-/var/lib/tailscale/certs}"
       TAILSCALE_KEEP_IP_INTERVAL_SEC: "${TAILSCALE_KEEP_IP_INTERVAL_SEC:-30}"
-      PROJECT_NAME: "${PROJECT_NAME:-myapp}"
+      PROJECT_NAME: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
       TAILSCALE_TS_TAILNET: "${TAILSCALE_TS_TAILNET:--}"
     user: "0:0"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tailscale/var-lib:/var/lib/tailscale
-      - ./tailscale:/workspace/tailscale:ro
+      - ./tailscale:/workspace/tailscale
     networks: [app_net]
     restart: unless-stopped
 
