@@ -3,7 +3,8 @@
 //  tailscale/tailscale-init.js
 //  Ensures tags from .env exist in Tailscale ACL tagOwners (merge-only),
 //  optionally mirrors tagOwners to a local ACL JSON/HuJSON file, and
-//  renders tailscale/serve.json from PROJECT_NAME_TAILSCALE + TAILSCALE_TAILNET_DOMAIN,
+//  updates TAILSCALE_TAILNET_DOMAIN in .env from API-derived data,
+//  renders tailscale/serve.json from env-derived values,
 //  and enables HTTPS in Tailnet settings when not already enabled.
 //
 //  Usage:
@@ -22,10 +23,6 @@
 //  Required for default init flow:
 //    TAILSCALE_TAGS
 //      - Comma-separated tags to ensure exist in tagOwners
-//    PROJECT_NAME_TAILSCALE
-//      - Hostname prefix to render in tailscale/serve.json
-//    TAILSCALE_TAILNET_DOMAIN
-//      - Tailnet domain suffix to render in tailscale/serve.json
 //
 //  Required for --remove-hostname flow:
 //    PROJECT_NAME
@@ -110,14 +107,97 @@ function isLikelyDomain(value) {
   return /^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(value);
 }
 
+function normalizeTailnetDomain(value) {
+  const v = (value || "").trim();
+  if (!v) return "";
+  if (v === "-" || v.toLowerCase() === "null" || v.toLowerCase() === "undefined") return "";
+  return v;
+}
+
+function isLikelyTailnetDomain(value) {
+  const clean = normalizeTailnetDomain(value).toLowerCase();
+  if (!clean) return false;
+  return isLikelyDomain(clean) && (clean.endsWith(".ts.net") || clean.endsWith(".beta.tailscale.net"));
+}
+
+function pickDomainFromSearchPaths(paths) {
+  if (!Array.isArray(paths)) return "";
+  const clean = paths.map((p) => (typeof p === "string" ? p.trim() : "")).filter(Boolean);
+  return clean.find((p) => p.toLowerCase().endsWith(".ts.net")) || clean.find((p) => isLikelyDomain(p)) || "";
+}
+
+function extractDomainFromDeviceName(name) {
+  if (typeof name !== "string") return "";
+  const clean = name.trim().toLowerCase().replace(/\.+$/, "");
+  if (!clean) return "";
+
+  if (isLikelyTailnetDomain(clean)) return clean;
+
+  const parts = clean.split(".");
+  if (parts.length < 3) return "";
+  const suffix = parts.slice(1).join(".");
+  return isLikelyTailnetDomain(suffix) ? suffix : "";
+}
+
+function inferDomainFromServeConfigText(serveText, projectName) {
+  if (typeof serveText !== "string" || !serveText.trim()) return "";
+
+  let parsed;
+  try {
+    parsed = JSON.parse(serveText);
+  } catch {
+    return "";
+  }
+
+  if (!parsed || typeof parsed !== "object" || !parsed.Web || typeof parsed.Web !== "object") {
+    return "";
+  }
+
+  const projectPrefix = normalizeHostLabel(projectName);
+  const domains = [];
+  const webHosts = Object.keys(parsed.Web);
+
+  webHosts.forEach((entry) => {
+    const label = normalizeHostLabel(entry);
+    if (!label) return;
+    const host = label.split(":")[0];
+    if (!host) return;
+
+    if (projectPrefix && host.startsWith(`${projectPrefix}.`)) {
+      const suffix = host.slice(projectPrefix.length + 1);
+      if (isLikelyTailnetDomain(suffix)) {
+        domains.push(suffix);
+        return;
+      }
+    }
+
+    const fromHost = extractDomainFromDeviceName(host);
+    if (fromHost) domains.push(fromHost);
+  });
+
+  return pickMostFrequent(domains);
+}
+
+function pickMostFrequent(items) {
+  if (!items.length) return "";
+  const counts = new Map();
+  for (const item of items) {
+    counts.set(item, (counts.get(item) || 0) + 1);
+  }
+  let best = "";
+  let bestCount = 0;
+  for (const [item, count] of counts.entries()) {
+    if (count > bestCount) {
+      best = item;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 function normalizeHostLabel(value) {
   if (typeof value !== "string") return "";
   return value.trim().toLowerCase();
-}
-
-function trimHostDots(value) {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/^\.+|\.+$/g, "");
 }
 
 function shortHostnameFromName(value) {
@@ -394,6 +474,21 @@ function parseJsonOrHujson(text) {
   }
 }
 
+function upsertEnvLine(lines, envMap, key, value) {
+  const newLine = `${key}=${value}`;
+  const existing = envMap[key];
+
+  if (existing) {
+    lines[existing.lineIndex] = newLine;
+    return;
+  }
+
+  if (lines.length && lines[lines.length - 1].trim() !== "") {
+    lines.push("");
+  }
+  lines.push(newLine);
+}
+
 function printList(header, values) {
   if (!values.length) return;
   console.log(header);
@@ -440,9 +535,13 @@ async function main() {
   const envPathArg = args.find((arg) => !arg.startsWith("-")) || "";
   const autoYes = args.includes("--yes") || args.includes("-y");
 
+  const envLines = [];
   const envMap = {};
   let envPath = "";
   let envPathDisplay = "(process.env only)";
+  let envEol = "\n";
+  let envHadTrailingNewline = false;
+  let hasEnvFile = false;
 
   if (envPathArg) {
     envPath = path.resolve(process.cwd(), envPathArg);
@@ -452,10 +551,15 @@ async function main() {
     }
 
     const rawEnv = fs.readFileSync(envPath, "utf-8");
+    envEol = rawEnv.includes("\r\n") ? "\r\n" : "\n";
+    envHadTrailingNewline = rawEnv.endsWith("\n");
+
     const parsedEnv = parseEnv(rawEnv);
+    envLines.push(...parsedEnv.lines);
     Object.assign(envMap, parsedEnv.map);
 
     envPathDisplay = envPath;
+    hasEnvFile = true;
   }
 
   const warnings = [];
@@ -468,8 +572,8 @@ async function main() {
   const tailnetFromLegacy = inputValue("TS_TAILNET");
   const tailnet = tailnetFromNew || tailnetFromLegacy || "-";
   const projectName = inputValue("PROJECT_NAME").trim();
-  const projectNameTailscale = trimHostDots(inputValue("PROJECT_NAME_TAILSCALE"));
-  const tailnetDomainForServe = trimHostDots(inputValue("TAILSCALE_TAILNET_DOMAIN"));
+  const existingTailnetDomainRaw = inputValue("TAILSCALE_TAILNET_DOMAIN");
+  const existingTailnetDomain = normalizeTailnetDomain(existingTailnetDomainRaw);
   const aclFilePathRaw = inputValue("TAILSCALE_ACL_JSON_PATH");
   const serveFilePathRaw = (inputValue("TAILSCALE_SERVE_JSON_PATH") || "./tailscale/serve.json").trim();
   const serveProxy = (inputValue("TAILSCALE_SERVE_PROXY") || "http://127.0.0.1:80").trim();
@@ -507,13 +611,8 @@ async function main() {
       errors.push("Missing PROJECT_NAME. --remove-hostname requires PROJECT_NAME in process.env or .env.");
     }
   } else {
-    if (!projectNameTailscale) {
-      errors.push("Missing PROJECT_NAME_TAILSCALE. Required to generate tailscale serve hostname.");
-    }
-    if (!tailnetDomainForServe) {
-      errors.push("Missing TAILSCALE_TAILNET_DOMAIN. Required to generate tailscale serve hostname.");
-    } else if (!isLikelyDomain(tailnetDomainForServe)) {
-      warnings.push(`TAILSCALE_TAILNET_DOMAIN may be invalid: ${tailnetDomainForServe}`);
+    if (!projectName) {
+      errors.push("Missing PROJECT_NAME. Required to generate tailscale serve hostname.");
     }
     if (!requiredTags.length) {
       errors.push("TAILSCALE_TAGS is empty or invalid. Provide one or more tags (example: tag:ci,tag:container).");
@@ -526,6 +625,9 @@ async function main() {
     }
   }
 
+  if (existingTailnetDomain && !isLikelyTailnetDomain(existingTailnetDomain)) {
+    warnings.push(`TAILSCALE_TAILNET_DOMAIN may be invalid (expected *.ts.net): ${existingTailnetDomainRaw}`);
+  }
   if (!removeHostnameMode && !isLikelyHttpUrl(serveProxy)) {
     errors.push(`TAILSCALE_SERVE_PROXY is invalid: ${serveProxy}`);
   }
@@ -701,6 +803,8 @@ async function main() {
   let remotePolicyETag = "";
   let remoteAddedTags = [];
   let remoteNextPolicy = null;
+  let apiTailnetDomain = "";
+  let apiTailnetDomainSource = "";
   let shouldEnableHttps = false;
   let currentHttpsEnabled = null;
 
@@ -728,7 +832,133 @@ async function main() {
     errors.push(`Failed to read ACL: ${err.message}`);
   }
 
-  // Tailnet HTTPS setting (enable if currently disabled)
+  // Try multiple sources to infer tailnet domain.
+  // 1) DNS search paths
+  try {
+    const dnsRes = await apiRequestJson({
+      method: "GET",
+      endpointPath: `/tailnet/${encodedTailnet}/dns/searchpaths`,
+      accessToken,
+    });
+
+    if (dnsRes.status === 200) {
+      const searchPaths = Array.isArray(dnsRes.body && dnsRes.body.searchPaths)
+        ? dnsRes.body.searchPaths
+        : Array.isArray(dnsRes.body)
+          ? dnsRes.body
+          : null;
+
+      if (!searchPaths) {
+        warnings.push("dns/searchpaths returned unexpected response shape (missing searchPaths array).");
+      } else {
+        const candidate = pickDomainFromSearchPaths(searchPaths);
+        if (candidate) {
+          apiTailnetDomain = candidate;
+          apiTailnetDomainSource = "dns/searchpaths";
+        } else {
+          warnings.push("dns/searchpaths returned no tailnet domain (empty list or no *.ts.net entry).");
+        }
+      }
+    } else if (dnsRes.status === 401) {
+      warnings.push("Cannot read dns/searchpaths (401). Missing or invalid DNS read scope.");
+    } else if (dnsRes.status === 403) {
+      warnings.push("Cannot read dns/searchpaths (403). OAuth token likely missing dns:read scope.");
+    } else {
+      warnings.push(`dns/searchpaths returned HTTP ${dnsRes.status}.`);
+    }
+  } catch (err) {
+    warnings.push(`dns/searchpaths request failed: ${err.message}`);
+  }
+
+  // 2) Full DNS configuration
+  if (!apiTailnetDomain) {
+    try {
+      const dnsCfgRes = await apiRequestJson({
+        method: "GET",
+        endpointPath: `/tailnet/${encodedTailnet}/dns/configuration`,
+        accessToken,
+      });
+
+      if (dnsCfgRes.status === 200 && dnsCfgRes.body && typeof dnsCfgRes.body === "object") {
+        const cfgSearchPaths = Array.isArray(dnsCfgRes.body.searchPaths)
+          ? dnsCfgRes.body.searchPaths
+          : Array.isArray(dnsCfgRes.body.preferences && dnsCfgRes.body.preferences.searchPaths)
+            ? dnsCfgRes.body.preferences.searchPaths
+            : Array.isArray(dnsCfgRes.body.configuration && dnsCfgRes.body.configuration.searchPaths)
+              ? dnsCfgRes.body.configuration.searchPaths
+              : null;
+        const candidate = pickDomainFromSearchPaths(cfgSearchPaths);
+
+        if (candidate) {
+          apiTailnetDomain = candidate;
+          apiTailnetDomainSource = "dns/configuration";
+        } else {
+          const topLevelKeys = Object.keys(dnsCfgRes.body);
+          warnings.push(`dns/configuration did not include a usable tailnet search path (keys: ${topLevelKeys.join(", ") || "(none)"}).`);
+        }
+      } else if (dnsCfgRes.status === 401) {
+        warnings.push("Cannot read dns/configuration (401). Missing or invalid DNS read scope.");
+      } else if (dnsCfgRes.status === 403) {
+        warnings.push("Cannot read dns/configuration (403). OAuth token likely missing dns:read scope.");
+      } else {
+        warnings.push(`dns/configuration returned HTTP ${dnsCfgRes.status}.`);
+      }
+    } catch (err) {
+      warnings.push(`dns/configuration request failed: ${err.message}`);
+    }
+  }
+
+  // 3) Device MagicDNS names
+  if (!apiTailnetDomain) {
+    try {
+      const devicesRes = await apiRequestJson({
+        method: "GET",
+        endpointPath: `/tailnet/${encodedTailnet}/devices`,
+        accessToken,
+      });
+
+      if (devicesRes.status === 200) {
+        const apiDevices = Array.isArray(devicesRes.body && devicesRes.body.devices)
+          ? devicesRes.body.devices
+          : Array.isArray(devicesRes.body)
+            ? devicesRes.body
+            : null;
+
+        if (!apiDevices) {
+          warnings.push("devices endpoint returned unexpected response shape (missing devices array).");
+          // Skip candidate inference on malformed shape.
+        } else if (!apiDevices.length) {
+          warnings.push("devices endpoint returned 0 devices; cannot infer domain from device names.");
+        }
+
+        const domains = (apiDevices || [])
+          .map((d) => [
+            extractDomainFromDeviceName(d && d.name),
+            extractDomainFromDeviceName(d && d.dnsName),
+            extractDomainFromDeviceName(d && d.hostname),
+          ])
+          .flat()
+          .filter(Boolean);
+        const candidate = pickMostFrequent(domains);
+        if (candidate) {
+          apiTailnetDomain = candidate;
+          apiTailnetDomainSource = "devices.name/dnsName";
+        } else if (apiDevices && apiDevices.length) {
+          warnings.push("devices endpoint had entries, but no device name exposed a tailnet domain.");
+        }
+      } else if (devicesRes.status === 401) {
+        warnings.push("Cannot read devices (401). Missing or invalid devices:core:read scope.");
+      } else if (devicesRes.status === 403) {
+        warnings.push("Cannot read devices (403). OAuth token likely missing devices:core:read scope.");
+      } else {
+        warnings.push(`devices endpoint returned HTTP ${devicesRes.status}.`);
+      }
+    } catch (err) {
+      warnings.push(`devices request failed: ${err.message}`);
+    }
+  }
+
+  // 4) Tailnet HTTPS setting (enable if currently disabled)
   try {
     const settingsRes = await apiRequestJson({
       method: "GET",
@@ -787,7 +1017,68 @@ async function main() {
     }
   }
 
-  const serveHostname = `${projectNameTailscale}.${tailnetDomainForServe}`;
+  if (!apiTailnetDomain && isLikelyTailnetDomain(tailnet)) {
+    apiTailnetDomain = normalizeTailnetDomain(tailnet);
+    apiTailnetDomainSource = "TAILSCALE_TS_TAILNET";
+    warnings.push(`Using TAILSCALE_TS_TAILNET as tailnet domain fallback: ${apiTailnetDomain}.`);
+  }
+
+  if (!apiTailnetDomain) {
+    const servePathForInfer = path.resolve(process.cwd(), serveFilePathRaw);
+    if (fs.existsSync(servePathForInfer)) {
+      try {
+        const serveText = fs.readFileSync(servePathForInfer, "utf-8");
+        const serveDomain = inferDomainFromServeConfigText(serveText, projectName);
+        if (serveDomain) {
+          if (!existingTailnetDomain || !isLikelyTailnetDomain(existingTailnetDomain)) {
+            apiTailnetDomain = serveDomain;
+            apiTailnetDomainSource = "serve.json";
+            warnings.push(`Using tailnet domain inferred from ${serveFilePathRaw}: ${serveDomain}.`);
+          } else if (serveDomain !== existingTailnetDomain) {
+            apiTailnetDomain = serveDomain;
+            apiTailnetDomainSource = "serve.json";
+            warnings.push(
+              `TAILSCALE_TAILNET_DOMAIN differs from ${serveFilePathRaw} (env=${existingTailnetDomain}, serve=${serveDomain}). Using serve value.`,
+            );
+          } else {
+            apiTailnetDomain = existingTailnetDomain;
+            apiTailnetDomainSource = "serve.json";
+          }
+        }
+      } catch (err) {
+        warnings.push(`Cannot read ${serveFilePathRaw} for tailnet domain fallback: ${err.message}`);
+      }
+    }
+  }
+
+  if (!apiTailnetDomain) {
+    if (existingTailnetDomain && isLikelyTailnetDomain(existingTailnetDomain)) {
+      apiTailnetDomain = existingTailnetDomain;
+      apiTailnetDomainSource = "env:TAILSCALE_TAILNET_DOMAIN";
+      warnings.push(`Could not infer TAILSCALE_TAILNET_DOMAIN from Tailscale API; using existing env value (unverified): ${existingTailnetDomain}.`);
+    } else {
+      errors.push(
+        "Could not infer TAILSCALE_TAILNET_DOMAIN from Tailscale API (tried: dns/searchpaths, dns/configuration, devices). Set TAILSCALE_TAILNET_DOMAIN manually from Tailscale Admin DNS settings.",
+      );
+    }
+  }
+
+  if (errors.length) {
+    printList("❌  Cannot continue:", errors);
+    if (warnings.length) printList("⚠️   Additional warnings:", warnings);
+    process.exit(1);
+  }
+
+  const envUpdates = [];
+  if (apiTailnetDomain && apiTailnetDomain !== existingTailnetDomain) {
+    envUpdates.push({
+      key: "TAILSCALE_TAILNET_DOMAIN",
+      before: normalizeTailnetDomain(existingTailnetDomainRaw) || "(missing)",
+      after: apiTailnetDomain,
+    });
+  }
+
+  const serveHostname = `${projectName}.${apiTailnetDomain}`;
   const servePathResolved = path.resolve(process.cwd(), serveFilePathRaw);
   let serveFileExists = fs.existsSync(servePathResolved);
   let serveFileCurrentText = "";
@@ -813,10 +1104,36 @@ async function main() {
 
   const hasRemoteUpdate = remoteAddedTags.length > 0;
   const hasAclFileUpdate = aclFileAddedTags.length > 0;
+  const hasEnvUpdate = envUpdates.length > 0;
+  const hasEnvFileUpdate = hasEnvFile && hasEnvUpdate;
   const hasHttpsUpdate = shouldEnableHttps;
 
-  if (!hasRemoteUpdate && !hasAclFileUpdate && !hasHttpsUpdate && !hasServeFileUpdate) {
+  if (apiTailnetDomainSource === "serve.json" && !hasEnvUpdate) {
+    const noisyPrefixes = [
+      "dns/searchpaths returned no tailnet domain",
+      "dns/configuration did not include a usable tailnet search path",
+      "devices endpoint returned 0 devices",
+    ];
+    for (let i = warnings.length - 1; i >= 0; i -= 1) {
+      const msg = warnings[i] || "";
+      if (noisyPrefixes.some((prefix) => msg.startsWith(prefix))) {
+        warnings.splice(i, 1);
+      }
+    }
+  }
+
+  if (!hasEnvFile && hasEnvUpdate) {
+    warnings.push("TAILSCALE_TAILNET_DOMAIN was inferred, but no .env path was provided (skipping file update).");
+  }
+
+  if (!hasRemoteUpdate && !hasAclFileUpdate && !hasEnvFileUpdate && !hasHttpsUpdate && !hasServeFileUpdate) {
     console.log("✅  No changes needed.");
+    if (!hasEnvFile && hasEnvUpdate) {
+      envUpdates.forEach((u) => {
+        console.log(`ℹ️   Inferred ${u.key}=${u.after} (not persisted).`);
+      });
+      console.log();
+    }
     if (warnings.length) printList("⚠️   Warnings:", warnings);
     console.log();
     process.exit(0);
@@ -832,6 +1149,19 @@ async function main() {
     console.log(`  - Local ACL file (${aclFilePathRaw}):`);
     console.log(`      Add missing tagOwners for: ${aclFileAddedTags.join(", ")}`);
     console.log("      Existing config keys are preserved.");
+  }
+  if (hasEnvUpdate) {
+    envUpdates.forEach((u) => {
+      console.log(`  - ${u.key}`);
+      console.log(`      from: ${u.before}`);
+      console.log(`      to  : ${u.after}`);
+      if (apiTailnetDomainSource) {
+        console.log(`      via : ${apiTailnetDomainSource}`);
+      }
+      if (!hasEnvFile) {
+        console.log("      note: no .env path provided, value will not be persisted");
+      }
+    });
   }
   if (hasHttpsUpdate) {
     console.log("  - Tailnet HTTPS:");
@@ -883,7 +1213,7 @@ async function main() {
       if (postRes.body && postRes.body.message) {
         console.error(`    ${postRes.body.message}`);
       }
-      console.error("    No local file changes were applied after this failure.\n");
+      console.error("    No local file/.env changes were applied after this failure.\n");
       process.exit(1);
     }
     console.log(`✅  Remote ACL updated. Added tags: ${remoteAddedTags.join(", ")}`);
@@ -917,11 +1247,28 @@ async function main() {
     console.log("✅  Tailnet HTTPS enabled.");
   }
 
-  // 4) Render tailscale serve config from env-derived hostname values.
+  // 4) Render tailscale serve config from env-derived values.
   if (hasServeFileUpdate) {
     fs.mkdirSync(path.dirname(servePathResolved), { recursive: true });
     fs.writeFileSync(servePathResolved, serveFileExpectedText, "utf-8");
     console.log(`✅  Serve config ${serveFileExists ? "updated" : "created"}: ${serveFilePathRaw}`);
+  }
+
+  // 5) Update env last.
+  if (hasEnvFileUpdate) {
+    envUpdates.forEach((u) => {
+      upsertEnvLine(envLines, envMap, u.key, u.after);
+    });
+    let updatedEnv = envLines.join(envEol);
+    if (envHadTrailingNewline && !updatedEnv.endsWith(envEol)) {
+      updatedEnv += envEol;
+    }
+    fs.writeFileSync(envPath, updatedEnv, "utf-8");
+    console.log(`✅  Updated ${envPathArg}`);
+  } else if (hasEnvUpdate) {
+    envUpdates.forEach((u) => {
+      console.log(`ℹ️   Inferred ${u.key}=${u.after} (not persisted; pass .env path to write file).`);
+    });
   }
 
   console.log("\nDone.\n");

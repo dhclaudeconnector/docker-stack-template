@@ -13,7 +13,6 @@
     "dockerapp-validate:ts": "node docker-compose/scripts/validate-ts.js",
     "dockerapp-validate:all": "npm run dockerapp-validate:env && npm run dockerapp-validate:compose && npm run dockerapp-validate:ts",
     "agent-app-swap:sync": "node scripts/sync-agent-app-swap.js & ctrlj",
-    "tailscale-init": "node tailscale/tailscale-init.js .env",
     "tailscale-remove-hostname": "node tailscale/tailscale-init.js .env --remove-hostname --yes",
     "tailscale-watchdog": "node tailscale/tailscale-watchdog.js",
     "dockerapp-gen:👇👇👇👇👇": "==dockerapp-gen==",
@@ -57,11 +56,14 @@
     "git-addfile-packagejson": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'git addfile packagejson'\"",
     "git-addfile-omessage": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'git addfile omessage'\"",
     "git-addfile-ogitignore": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'git addfile ogitignore'\"",
-    "env-cloudflared-create": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env -- ocli cloudflared'\"",
-    "env-push": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env --push -eUrl=$env:DOTENVRTDB_URL'\"",
     "env-pull.local": "powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env -- dotenvrtdb -e .env.local --pull -eUrl=$env:DOTENVRTDB_URL'",
     "stack:clone": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-omniroute --name dockerstack-omniroute --force",
     "stack:clone-dockerstack-s3-proxy": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-s3-proxy --name dockerstack-s3-proxy --force",
-    "stack:clone-dockerstack-pocketbase": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-pocketbase --name dockerstack-pocketbase --force"
+    "stack:clone-dockerstack-pocketbase": "node scripts/clone-stack.js --output H:/nodejs-tester/dockerstack-pocketbase --name dockerstack-pocketbase --force",
+    "stack:rtdbmanager": "node scripts/clone-stack.js --output H:/nodejs-tester/rtdbmanager --name rtdbmanager --force",
+    "env-cloudflared-create": "ctrlj&powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env -- ocli cloudflared'\"",
+    "tailscale-init": "node tailscale/tailscale-init.js .env",
+    "ocli-gh": "ctrlj&powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env -- ocli gh'\"",
+    "env-push": "ctrlj&powershell -NoProfile -Command \"Start-Process -FilePath cmd.exe -WorkingDirectory '%CD%' -ArgumentList '/k', 'dotenvrtdb -e .env --push -eUrl=$env:DOTENVRTDB_URL'\""
   }
 }
