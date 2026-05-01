@@ -11,6 +11,7 @@
 
 services:
   app:
+    container_name: "[main-app]"
     image: "${PROJECT_NAME:-myapp}-app:local"
     build:
       context: ./services/app

@@ -24,6 +24,7 @@
 services:
   # ── Dozzle: real-time container logs ──────────────────────────
   dozzle:
+    container_name: "dozzle"
     profiles: [dozzle]
     image: amir20/dozzle:v10.3.3
     volumes:
@@ -45,6 +46,7 @@ services:
 
   # ── Filebrowser: browse and download log files ─────────────────
   filebrowser:
+    container_name: "filebrowser"
     profiles: [filebrowser]
     image: filebrowser/filebrowser:v2.30.0
     command: --noauth --port 80 --root /srv --database /database/filebrowser.db
@@ -65,6 +67,7 @@ services:
 
   # ── WebSSH (Linux): ttyd container → SSH into host runner ──────
   webssh:
+    container_name: "webssh"
     profiles: [webssh-linux]
     build: ./services/webssh
     command:
@@ -98,6 +101,7 @@ services:
 
   # ── WebSSH (Windows): socat bridge → host ttyd process ─────────
   webssh-windows:
+    container_name: "webssh-windows"
     profiles: [webssh-windows]
     image: alpine/socat:latest
     command: >

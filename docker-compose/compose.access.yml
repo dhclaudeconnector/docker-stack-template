@@ -18,6 +18,7 @@
 services:
   # ── Keep IP prepare (Linux profile): optional restore + optional remove hostname ──
   tailscale-keep-ip-prepare-linux:
+    container_name: "ts-keep-ip-prepare-linux"
     profiles: [tailscale-linux]
     image: node:20-alpine
     command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "prepare"]
@@ -43,6 +44,7 @@ services:
 
   # ── Keep IP prepare (Windows profile): optional restore + optional remove hostname ─
   tailscale-keep-ip-prepare-windows:
+    container_name: "ts-keep-ip-prepare-windows"
     profiles: [tailscale-windows]
     image: node:20-alpine
     command: ["node", "/workspace/tailscale/tailscale-keep-ip.js", "prepare"]
@@ -68,6 +70,7 @@ services:
 
   # ── Tailscale: Linux kernel mode (NET_ADMIN + TUN) ─────────────
   tailscale-linux:
+    container_name: "ts-linux"
     profiles: [tailscale-linux]
     image: tailscale/tailscale:stable
     hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
@@ -100,6 +103,7 @@ services:
 
   # ── Tailscale: Windows/WSL2 userspace mode ─────────────────────
   tailscale-windows:
+    container_name: "ts-windows"
     profiles: [tailscale-windows]
     image: tailscale/tailscale:stable
     hostname: "${PROJECT_NAME_TAILSCALE:-${PROJECT_NAME:-myapp}}"
@@ -127,6 +131,7 @@ services:
 
   # ── Watchdog (Linux profile): monitor tailscale status/log only ───────
   tailscale-watchdog-linux:
+    container_name: "ts-watchdog-linux"
     profiles: [tailscale-linux]
     build:
       context: .
@@ -162,6 +167,7 @@ services:
 
   # ── Watchdog (Windows profile): monitor tailscale status/log only ─────
   tailscale-watchdog-windows:
+    container_name: "ts-watchdog-windows"
     profiles: [tailscale-windows]
     build:
       context: .
@@ -197,6 +203,7 @@ services:
 
   # ── Keep IP backup loop (Linux profile): upload state periodically ─────
   tailscale-keep-ip-backup-linux:
+    container_name: "ts-keep-ip-backup-linux"
     profiles: [tailscale-linux]
     image: node:20-alpine
     depends_on:
@@ -223,6 +230,7 @@ services:
 
   # ── Keep IP backup loop (Windows profile): upload state periodically ───
   tailscale-keep-ip-backup-windows:
+    container_name: "ts-keep-ip-backup-windows"
     profiles: [tailscale-windows]
     image: node:20-alpine
     depends_on:

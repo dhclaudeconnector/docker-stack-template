@@ -15,6 +15,7 @@ networks:
 services:
   # ── Caddy: auto reverse proxy via Docker labels ────────────────
   caddy:
+    container_name: "caddy"
     image: lucaslorentz/caddy-docker-proxy:2.9.1-alpine
     ports:
       - "80:80"
@@ -38,6 +39,7 @@ services:
 
   # ── Cloudflared: expose to Internet without opening ports ──────
   cloudflared:
+    container_name: "cloudflared"
     image: cloudflare/cloudflared:latest
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
