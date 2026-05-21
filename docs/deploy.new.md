@@ -91,7 +91,8 @@ Toi thieu:
 - `PROJECT_NAME`
 - `DOMAIN`
 - `CADDY_EMAIL`
-- `TINYAUTH_APP_URL`, `TINYAUTH_PORT`, `TINYAUTH_SECRET`, `TINYAUTH_DB_FILE`, `TINYAUTH_USERS`
+- `TINYAUTH_APP_URL`, `TINYAUTH_PORT`, `TINYAUTH_DB_FILE`, `TINYAUTH_USERS`
+- `TINYAUTH_COOKIE_SECURE`, `TINYAUTH_TRUSTED_PROXIES`
 - `APP_PORT`
 - `LITESTREAM_*` nếu `ENABLE_LITESTREAM=true`
 
@@ -133,6 +134,8 @@ npm run dockerapp-exec:logs
 ### Lop public
 - Host `${PROJECT_NAME}.${DOMAIN}` truy cap OK.
 - Tinyauth forward_auth hoat dong.
+- `TINYAUTH_APP_URL` dung `https://auth.<domain>`.
+- `TINYAUTH_USERS` dung bcrypt hash, khong dung plain password.
 
 ### Lop ops (neu bat)
 - `logs.*`, `files.*`, `ttyd.*` truy cap duoc.

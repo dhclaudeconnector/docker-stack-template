@@ -26,7 +26,7 @@
 ## Routing
 - Public host: `${PROJECT_NAME}.${DOMAIN}` (+ alias).
 - Internal HTTPS host: `${PROJECT_NAME}.${TAILSCALE_TAILNET_DOMAIN}` với `tls internal`.
-- Auth: Caddy `forward_auth` tới `tinyauth:${TINYAUTH_PORT}`.
+- Auth: Caddy `forward_auth` tới `tinyauth:${TINYAUTH_PORT}` và ép `X-Forwarded-Proto https`.
 
 ## Auth/Litestream layer
 - Tinyauth và Litestream nằm ở `docker-compose/compose.auth.yml`, không đặt trong `compose.apps.yml`.

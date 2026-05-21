@@ -120,7 +120,7 @@ Plus:
 - `DIRECTORY_STRUCTURE` snapshot (tree, depth-limited)
 
 <!-- BEGIN:EMBEDDED_FILES -->
-Generated at: 2026-05-12T06:12:03.053Z
+Generated at: 2026-05-21T08:50:03.208Z
 Use this snapshot as direct editing context.
 
 ### `DIRECTORY_STRUCTURE`
@@ -209,7 +209,7 @@ Use this snapshot as direct editing context.
     - tailscale-keep-ip.js
     - tailscale-watchdog.js
   - tasks/
-    - 2026-05-12-01-bo-sung-tinyauth/
+    - 2026-05-12/
       - 2026-05-12-01-bo-sung-tinyauth.md
       - plan-trien-khai-litestream-tinyauth.md
     - templates/
@@ -271,24 +271,23 @@ TAILSCALE_KEEP_IP_FIREBASE_URL=${DOTENVRTDB_ROOT_URL}/${DOTENVRTDB_PATH_URL}-tai
 # Email for Caddy SSL via Let's Encrypt
 CADDY_EMAIL=admin@${DOMAIN}
 
-# Public URL where Tinyauth is exposed by Caddy/Cloudflared.
-TINYAUTH_APP_URL=http://auth.${DOMAIN}
+# Public HTTPS URL where Tinyauth is exposed by Cloudflared/Tailscale.
+TINYAUTH_APP_URL=https://auth.${DOMAIN}
 # Internal port exposed by Tinyauth container.
 TINYAUTH_PORT=3000
-# Long random secret used to sign sessions/cookies. Generate: openssl rand -hex 32
-TINYAUTH_SECRET=change-me-generate-a-long-random-secret
 # SQLite database filename stored in ${DOCKER_VOLUMES_ROOT}/tinyauth.
 TINYAUTH_DB_FILE=tinyauth.db
-# Static users, comma-separated. Common format: user:password or user:password_hash.
-TINYAUTH_USERS=admin:changeme
+# Static users, comma-separated. Must be username:bcrypt_hash[:totp].
+# Generate with: docker run -it --rm ghcr.io/steveiliop56/tinyauth:v5 user create --interactive
+# Choose "format for Docker" so bcrypt "$" characters are escaped as "$$".
+# The hash below is only a shape example; validate-env requires a deployment-specific hash.
+TINYAUTH_USERS=admin:$$2a$$10$$UdLYoJ5lgPsC0RKqYH/jMua7zIn0g9kPqWmhYayJYLaZQ/FTmH2/u
 # Automatically redirect to OAuth provider. Options: none, github, google, generic
 TINYAUTH_OAUTH_AUTO_REDIRECT=none
-# Hide the post-login continue page. Options: true, false
-TINYAUTH_DISABLE_CONTINUE=false
 # Secure cookie flag. Keep true behind HTTPS tunnels; set false only for plain local HTTP testing.
 TINYAUTH_COOKIE_SECURE=true
-# Trust reverse proxy headers from Caddy/Cloudflared/Tailscale; suppress direct http/https warning.
-TINYAUTH_TRUST_PROXY=true
+# Trust reverse proxy headers from Caddy/Cloudflared/Tailscale.
+TINYAUTH_TRUSTED_PROXIES=127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 # Log verbosity. Options: trace, debug, info, warn, error
 TINYAUTH_LOG_LEVEL=info
 # OAuth provider config. Google: https://console.cloud.google.com/apis/credentials
@@ -297,15 +296,17 @@ TINYAUTH_GOOGLE_CLIENT_SECRET=
 # GitHub OAuth app: https://github.com/settings/developers
 TINYAUTH_GITHUB_CLIENT_ID=
 TINYAUTH_GITHUB_CLIENT_SECRET=
-# Generic OIDC discovery issuer, client id/secret, scopes.
-TINYAUTH_OIDC_ISSUER=
-TINYAUTH_OIDC_CLIENT_ID=
-TINYAUTH_OIDC_CLIENT_SECRET=
-TINYAUTH_OIDC_SCOPES=openid email profile
-# Optional access control lists, comma-separated email/domain/group depending on provider support.
-TINYAUTH_ALLOWED_USERS=
-TINYAUTH_ALLOWED_DOMAINS=
-TINYAUTH_ALLOWED_GROUPS=
+# Generic OAuth/OIDC provider. Callback path: /api/oauth/callback/generic
+TINYAUTH_GENERIC_CLIENT_ID=
+TINYAUTH_GENERIC_CLIENT_SECRET=
+TINYAUTH_GENERIC_AUTH_URL=
+TINYAUTH_GENERIC_TOKEN_URL=
+TINYAUTH_GENERIC_USER_INFO_URL=
+TINYAUTH_GENERIC_SCOPES=openid email profile
+TINYAUTH_GENERIC_REDIRECT_URL=https://auth.${DOMAIN}/api/oauth/callback/generic
+TINYAUTH_GENERIC_NAME=Generic
+# Optional OAuth whitelist, comma-separated email/domain/regex values.
+TINYAUTH_OAUTH_WHITELIST=
 
 # ================================================================
 #  LITESTREAM — SQLite backup/replication to S3-compatible storage
@@ -459,6 +460,7 @@ CLOUDFLARED_TUNNEL_HOSTNAME_3=ttyd.${DOMAIN}
 CLOUDFLARED_TUNNEL_HOSTNAME_4=dozzle.${DOMAIN}
 CLOUDFLARED_TUNNEL_HOSTNAME_5=files.${DOMAIN}
 CLOUDFLARED_TUNNEL_HOSTNAME_6=deploy.${DOMAIN}
+CLOUDFLARED_TUNNEL_HOSTNAME_7=auth.${DOMAIN}
 
 # Internal services behind each hostname
 CLOUDFLARED_TUNNEL_SERVICE_1=http://caddy:80
@@ -467,6 +469,7 @@ CLOUDFLARED_TUNNEL_SERVICE_3=http://caddy:80
 CLOUDFLARED_TUNNEL_SERVICE_4=http://caddy:80
 CLOUDFLARED_TUNNEL_SERVICE_5=http://caddy:80
 CLOUDFLARED_TUNNEL_SERVICE_6=http://caddy:80
+CLOUDFLARED_TUNNEL_SERVICE_7=http://caddy:80
 
 # CI sync value for cloudflared/credentials.json
 CLOUDFLARED_TUNNEL_CREDENTIALS_BASE64=file:base64:./cloudflared/credentials.json
@@ -589,6 +592,7 @@ services:
       - "caddy=http://${PROJECT_NAME}.${DOMAIN}, http://main.${DOMAIN}, http://${DOMAIN}, http://${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
       # Internal HTTPS site for Tailscale / trusted LAN access.
@@ -596,6 +600,7 @@ services:
       - "caddy_1.tls=internal"
       - "caddy_1.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy_1.forward_auth.uri=/api/auth/caddy"
+      - "caddy_1.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy_1.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
       - "caddy_1.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
     networks: [app_net]
@@ -603,7 +608,7 @@ services:
       litestream-restore:
         condition: service_completed_successfully
       tinyauth:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -714,39 +719,45 @@ services:
   tinyauth:
     container_name: "tinyauth"
     image: ghcr.io/steveiliop56/tinyauth:v5
-    env_file:
-      - ./.env
     environment:
-      APP_URL: "${TINYAUTH_APP_URL:-http://auth.${DOMAIN}}"
-      SECRET: "${TINYAUTH_SECRET:-change-me-generate-a-long-random-secret}"
-      USERS: "${TINYAUTH_USERS:-admin:changeme}"
-      OAUTH_AUTO_REDIRECT: "${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
-      DISABLE_CONTINUE: "${TINYAUTH_DISABLE_CONTINUE:-false}"
-      COOKIE_SECURE: "${TINYAUTH_COOKIE_SECURE:-true}"
-      TRUST_PROXY: "${TINYAUTH_TRUST_PROXY:-true}"
-      LOG_LEVEL: "${TINYAUTH_LOG_LEVEL:-info}"
-      GOOGLE_CLIENT_ID: "${TINYAUTH_GOOGLE_CLIENT_ID:-}"
-      GOOGLE_CLIENT_SECRET: "${TINYAUTH_GOOGLE_CLIENT_SECRET:-}"
-      GITHUB_CLIENT_ID: "${TINYAUTH_GITHUB_CLIENT_ID:-}"
-      GITHUB_CLIENT_SECRET: "${TINYAUTH_GITHUB_CLIENT_SECRET:-}"
-      OIDC_ISSUER: "${TINYAUTH_OIDC_ISSUER:-}"
-      OIDC_CLIENT_ID: "${TINYAUTH_OIDC_CLIENT_ID:-}"
-      OIDC_CLIENT_SECRET: "${TINYAUTH_OIDC_CLIENT_SECRET:-}"
-      OIDC_SCOPES: "${TINYAUTH_OIDC_SCOPES:-openid email profile}"
-      ALLOWED_USERS: "${TINYAUTH_ALLOWED_USERS:-}"
-      ALLOWED_DOMAINS: "${TINYAUTH_ALLOWED_DOMAINS:-}"
-      ALLOWED_GROUPS: "${TINYAUTH_ALLOWED_GROUPS:-}"
-      DATABASE_URL: "sqlite:////data/${TINYAUTH_DB_FILE:-tinyauth.db}"
+      TINYAUTH_APPURL: "${TINYAUTH_APP_URL:-https://auth.${DOMAIN}}"
+      TINYAUTH_SERVER_PORT: "${TINYAUTH_PORT:-3000}"
+      TINYAUTH_DATABASE_PATH: "/data/${TINYAUTH_DB_FILE:-tinyauth.db}"
+      TINYAUTH_AUTH_USERS: "${TINYAUTH_USERS:-}"
+      TINYAUTH_AUTH_SECURECOOKIE: "${TINYAUTH_COOKIE_SECURE:-true}"
+      TINYAUTH_AUTH_TRUSTEDPROXIES: "${TINYAUTH_TRUSTED_PROXIES:-127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
+      TINYAUTH_OAUTH_AUTOREDIRECT: "${TINYAUTH_OAUTH_AUTO_REDIRECT:-none}"
+      TINYAUTH_OAUTH_WHITELIST: "${TINYAUTH_OAUTH_WHITELIST:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GOOGLE_CLIENTID: "${TINYAUTH_GOOGLE_CLIENT_ID:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GOOGLE_CLIENTSECRET: "${TINYAUTH_GOOGLE_CLIENT_SECRET:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GITHUB_CLIENTID: "${TINYAUTH_GITHUB_CLIENT_ID:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GITHUB_CLIENTSECRET: "${TINYAUTH_GITHUB_CLIENT_SECRET:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_CLIENTID: "${TINYAUTH_GENERIC_CLIENT_ID:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_CLIENTSECRET: "${TINYAUTH_GENERIC_CLIENT_SECRET:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_AUTHURL: "${TINYAUTH_GENERIC_AUTH_URL:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_TOKENURL: "${TINYAUTH_GENERIC_TOKEN_URL:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_USERINFOURL: "${TINYAUTH_GENERIC_USER_INFO_URL:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_SCOPES: "${TINYAUTH_GENERIC_SCOPES:-openid email profile}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_REDIRECTURL: "${TINYAUTH_GENERIC_REDIRECT_URL:-}"
+      TINYAUTH_OAUTH_PROVIDERS_GENERIC_NAME: "${TINYAUTH_GENERIC_NAME:-Generic}"
+      TINYAUTH_LOG_LEVEL: "${TINYAUTH_LOG_LEVEL:-info}"
     volumes:
       - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tinyauth:/data
     labels:
       - "caddy=http://auth.${PROJECT_NAME}.${DOMAIN}, http://auth.${DOMAIN}, http://auth.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}"
       - "caddy.reverse_proxy={{upstreams ${TINYAUTH_PORT:-3000}}}"
+      - "caddy.reverse_proxy.header_up=X-Forwarded-Proto https"
     networks: [app_net]
     depends_on:
       litestream-restore:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "tinyauth", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 ```
 
 ### `docker-compose/compose.ops.yml`
@@ -794,6 +805,7 @@ services:
       - "caddy.reverse_proxy.flush_interval=-1" # ← thêm dòng này
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -816,6 +828,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 80}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -851,6 +864,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 7681}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -872,6 +886,7 @@ services:
       - "caddy.reverse_proxy={{upstreams 7681}}"
       - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
       - "caddy.forward_auth.uri=/api/auth/caddy"
+      - "caddy.forward_auth.header_up=X-Forwarded-Proto https"
       - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
     networks: [app_net]
     restart: unless-stopped
@@ -1405,6 +1420,7 @@ exec docker compose \
 "use strict";
 
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 
 const envPath = path.resolve(process.cwd(), ".env");
@@ -1518,6 +1534,69 @@ function isValidHttpsJsonUrl(v) {
   }
 }
 
+function isValidHttpsOrigin(v) {
+  try {
+    const u = new URL(v);
+    if (u.protocol !== "https:") return "must start with https://";
+    if (u.pathname !== "/" || u.search || u.hash) {
+      return "must be an origin URL only, e.g. https://auth.example.com";
+    }
+    if (v.endsWith("/")) return "must not end with /";
+    return null;
+  } catch {
+    return "must be a valid https URL";
+  }
+}
+
+function normalizeDockerEscapedDollar(v) {
+  return String(v || "").replace(/\$\$/g, "$");
+}
+
+const TINYAUTH_EXAMPLE_BCRYPT_HASH = "$2a$10$UdLYoJ5lgPsC0RKqYH/jMua7zIn0g9kPqWmhYayJYLaZQ/FTmH2/u";
+
+function validateTinyauthUsers(v) {
+  const users = v.split(",").map((part) => part.trim()).filter(Boolean);
+  if (!users.length) return "must contain at least one user";
+
+  for (const entry of users) {
+    const parts = entry.split(":");
+    const username = (parts[0] || "").trim();
+    const hash = normalizeDockerEscapedDollar(parts[1] || "");
+    if (!username || parts.length < 2) {
+      return "each entry must use username:bcrypt_hash[:totp]";
+    }
+    if (!/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash)) {
+      return "password must be a bcrypt hash, not a plain password";
+    }
+    if (hash === TINYAUTH_EXAMPLE_BCRYPT_HASH) {
+      return "uses the bundled example bcrypt hash; generate a deployment-specific hash";
+    }
+  }
+
+  return null;
+}
+
+function validateTrustedProxies(v) {
+  const entries = v.split(",").map((part) => part.trim()).filter(Boolean);
+  if (!entries.length) return "must contain at least one IP/CIDR";
+
+  for (const entry of entries) {
+    const [ip, prefix, extra] = entry.split("/");
+    if (extra !== undefined || !net.isIP(ip)) {
+      return `invalid IP/CIDR entry: ${entry}`;
+    }
+    if (prefix !== undefined) {
+      const n = Number(prefix);
+      const max = net.isIP(ip) === 4 ? 32 : 128;
+      if (!Number.isInteger(n) || n < 0 || n > max) {
+        return `invalid CIDR prefix in entry: ${entry}`;
+      }
+    }
+  }
+
+  return null;
+}
+
 function buildAppHost(project, domain) {
   const p = (project || "").trim().toLowerCase();
   const d = (domain || "").trim().toLowerCase();
@@ -1533,18 +1612,46 @@ checkRequired("PROJECT_NAME", "docker project/network + subdomain prefix", (v) =
 );
 checkRequired("DOMAIN", "root domain", isValidDomain);
 checkRequired("CADDY_EMAIL", "caddy email label", (v) => (v.includes("@") ? null : "invalid email"));
-checkRequired("TINYAUTH_APP_URL", "public Tinyauth URL", (v) =>
-  v.startsWith("http://") || v.startsWith("https://") ? null : "must start with http:// or https://"
-);
+checkRequired("TINYAUTH_APP_URL", "public HTTPS Tinyauth URL", isValidHttpsOrigin);
 checkPort("TINYAUTH_PORT", true);
-checkRequired("TINYAUTH_SECRET", "session/cookie signing secret", (v) =>
-  v.length >= 24 ? null : "must be at least 24 characters"
+checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file", (v) =>
+  v.includes("/") || v.includes("\\") ? "must be a filename, not a path" : null
 );
-if ((env.TINYAUTH_SECRET || "").includes("change-me")) {
-  warnings.push("TINYAUTH_SECRET uses example default -> replace before public deploy");
+checkRequired("TINYAUTH_USERS", "static users in username:bcrypt_hash format", validateTinyauthUsers);
+checkRequired("TINYAUTH_COOKIE_SECURE", "secure cookie toggle", (v) => (isBool(v) ? null : "must be true|false"));
+checkRequired("TINYAUTH_TRUSTED_PROXIES", "trusted Caddy/Cloudflared/Tailscale proxy CIDRs", validateTrustedProxies);
+checkOptional("TINYAUTH_OAUTH_AUTO_REDIRECT", "none|github|google|generic", (v) =>
+  v === "none" || /^[a-z][a-z0-9_-]*$/.test(v) ? null : "must be none or a provider id"
+);
+checkOptional("TINYAUTH_OAUTH_WHITELIST", "comma-separated OAuth email/domain/regex whitelist");
+for (const [name, clientKey, secretKey] of [
+  ["Google", "TINYAUTH_GOOGLE_CLIENT_ID", "TINYAUTH_GOOGLE_CLIENT_SECRET"],
+  ["GitHub", "TINYAUTH_GITHUB_CLIENT_ID", "TINYAUTH_GITHUB_CLIENT_SECRET"],
+  ["Generic", "TINYAUTH_GENERIC_CLIENT_ID", "TINYAUTH_GENERIC_CLIENT_SECRET"],
+]) {
+  const clientId = (env[clientKey] || "").trim();
+  const clientSecret = (env[secretKey] || "").trim();
+  if (clientId || clientSecret) {
+    if (!clientId || !clientSecret) errors.push(`${name} OAuth requires both ${clientKey} and ${secretKey}`);
+    else ok.push(`${name} OAuth client/secret=OK (optional)`);
+  }
 }
-checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file");
-checkRequired("TINYAUTH_USERS", "at least one static user or deployment default");
+for (const key of [
+  "TINYAUTH_SECRET",
+  "TINYAUTH_DISABLE_CONTINUE",
+  "TINYAUTH_TRUST_PROXY",
+  "TINYAUTH_ALLOWED_USERS",
+  "TINYAUTH_ALLOWED_DOMAINS",
+  "TINYAUTH_ALLOWED_GROUPS",
+  "TINYAUTH_OIDC_ISSUER",
+  "TINYAUTH_OIDC_CLIENT_ID",
+  "TINYAUTH_OIDC_CLIENT_SECRET",
+  "TINYAUTH_OIDC_SCOPES",
+]) {
+  if ((env[key] || "").trim()) {
+    warnings.push(`${key} is legacy/deprecated for Tinyauth v5 and is not passed to the tinyauth container`);
+  }
+}
 checkPort("APP_PORT", true);
 
 // 2) Optional env from compose files
@@ -1842,9 +1949,20 @@ try {
 ```yaml
 # ================================================================
 #  /etc/litestream.yml — Multi-DB SQLite replication
+#
+#  Biến bắt buộc:
+#    LITESTREAM_S3_ENDPOINT          — vd: https://<id>.supabase.co/storage/v1/s3
+#                                          hoặc https://s3.amazonaws.com
+#    LITESTREAM_S3_BUCKET            — tên bucket
+#    LITESTREAM_S3_ACCESS_KEY_ID     — S3 / Supabase access key
+#    LITESTREAM_S3_SECRET_ACCESS_KEY — S3 / Supabase secret key
+#
+#  Mỗi DB dùng path riêng trên S3 để tránh ghi đè dữ liệu.
+#  Thêm DB mới: copy block entry, đổi path + S3 path env.
 # ================================================================
 
 dbs:
+  # ── Tinyauth SQLite ──────────────────────────────────────────────
   - path: /data/tinyauth/${TINYAUTH_DB_FILE}
     replicas:
       - type: s3
@@ -1853,11 +1971,25 @@ dbs:
         path: ${LITESTREAM_TINYAUTH_S3_PATH}
         access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID}
         secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY}
+
+        # Upload WAL frames lên S3 mỗi 5s
+        # → mất tối đa 5s data nếu SIGKILL không có grace period
         sync-interval: ${LITESTREAM_SYNC_INTERVAL}
+
+        # Tối ưu startup time:
+        # Giảm snapshot-interval từ 1h → 30m.
+        # Khi restore, Litestream phải replay WAL frames từ snapshot
+        # cuối cùng đến hiện tại. Snapshot càng gần → replay càng ít
+        # → restore nhanh hơn.
+        # Với 30m: worst-case replay = 30 phút writes.
+        # Chi phí: gấp đôi số lần tạo snapshot (vẫn nhỏ so với WAL).
         snapshot-interval: ${LITESTREAM_SNAPSHOT_INTERVAL}
+
+        # Giữ 48h generations để tự dọn phiên bản cũ hơn
         retention: ${LITESTREAM_RETENTION}
         retention-check-interval: ${LITESTREAM_RETENTION_CHECK_INTERVAL}
 
+  # ── App SQLite ───────────────────────────────────────────────────
   - path: /data/app/${LITESTREAM_APP_DB_FILE}
     replicas:
       - type: s3
@@ -1866,6 +1998,7 @@ dbs:
         path: ${LITESTREAM_APP_S3_PATH}
         access-key-id: ${LITESTREAM_S3_ACCESS_KEY_ID}
         secret-access-key: ${LITESTREAM_S3_SECRET_ACCESS_KEY}
+
         sync-interval: ${LITESTREAM_SYNC_INTERVAL}
         snapshot-interval: ${LITESTREAM_SNAPSHOT_INTERVAL}
         retention: ${LITESTREAM_RETENTION}
@@ -1932,7 +2065,7 @@ exec litestream replicate -config "$CONFIG_PATH"
 ## Compose layer
 - File: `docker-compose/compose.auth.yml`.
 - `dc.sh` nạp layer này ngay sau `compose.core.yml` và trước ops/access/app.
-- Các project sau nên giữ auth layer riêng, không nhúng Tinyauth vào `compose.apps.yml`.
+- Service `tinyauth` không dùng `env_file`; compose chỉ map các biến Tinyauth v5 hợp lệ vào container để tránh container đọc nhầm biến template/deprecated.
 
 ## Cấu hình chính
 - Service: `tinyauth`
@@ -1940,11 +2073,10 @@ exec litestream replicate -config "$CONFIG_PATH"
 - Image: `ghcr.io/steveiliop56/tinyauth:v5`
 - Network: `app_net`
 - Data volume: `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/tinyauth:/data`
-- DB runtime: `sqlite:////data/${TINYAUTH_DB_FILE}`
-- Public auth host:
-  - `http://auth.${PROJECT_NAME}.${DOMAIN}`
-  - `http://auth.${DOMAIN}`
-  - `http://auth.${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}`
+- DB runtime: `/data/${TINYAUTH_DB_FILE}`
+- Public auth URL: `https://auth.${DOMAIN}`
+
+Các label Caddy vẫn dùng `http://...` vì Cloudflared/Tailscale terminate HTTPS rồi proxy HTTP nội bộ vào Caddy. `TINYAUTH_APP_URL` phải là URL HTTPS public để cookie/redirect đúng scheme.
 
 ## Caddy integration
 Các service cần bảo vệ thêm labels:
@@ -1952,24 +2084,39 @@ Các service cần bảo vệ thêm labels:
 ```yaml
 - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
 - "caddy.forward_auth.uri=/api/auth/caddy"
+- "caddy.forward_auth.header_up=X-Forwarded-Proto https"
 - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
 ```
 
-Giữ label `reverse_proxy` của service như cũ.
+Giữ label `reverse_proxy` của service như cũ. Header `X-Forwarded-Proto https` giúp Tinyauth nhìn đúng scheme public khi request đi qua Cloudflared/Tailscale vào Caddy bằng HTTP nội bộ.
 
 ## ENV cần thiết
-- `TINYAUTH_APP_URL`: public URL của Tinyauth, ví dụ `http://auth.${DOMAIN}`.
+- `TINYAUTH_APP_URL`: public URL của Tinyauth, ví dụ `https://auth.${DOMAIN}`.
 - `TINYAUTH_PORT`: port nội bộ Tinyauth, mặc định `3000`.
-- `TINYAUTH_SECRET`: secret ký session/cookie. Generate: `openssl rand -hex 32`.
 - `TINYAUTH_DB_FILE`: tên file SQLite trong volume Tinyauth, mặc định `tinyauth.db`.
-- `TINYAUTH_USERS`: users tĩnh, comma-separated, ví dụ `admin:changeme`.
-- `TINYAUTH_OAUTH_AUTO_REDIRECT`: auto redirect provider. Giá trị phổ biến: `none`, `github`, `google`, `generic`.
-- `TINYAUTH_DISABLE_CONTINUE`: `true|false`, ẩn/hiện trang continue sau login.
+- `TINYAUTH_USERS`: users tĩnh, comma-separated, bắt buộc dùng bcrypt: `username:bcrypt_hash[:totp]`.
 - `TINYAUTH_COOKIE_SECURE`: `true|false`, giữ `true` khi đi qua HTTPS tunnel.
-- `TINYAUTH_TRUST_PROXY`: `true|false`, giữ `true` với Caddy/Cloudflared/Tailscale để tránh cảnh báo http/https direct.
+- `TINYAUTH_TRUSTED_PROXIES`: danh sách IP/CIDR của proxy tin cậy, mặc định nên gồm private Docker ranges.
 - `TINYAUTH_LOG_LEVEL`: `trace|debug|info|warn|error`.
 
+Mapping runtime v5:
+- `TINYAUTH_APP_URL` -> `TINYAUTH_APPURL`
+- `TINYAUTH_USERS` -> `TINYAUTH_AUTH_USERS`
+- `TINYAUTH_COOKIE_SECURE` -> `TINYAUTH_AUTH_SECURECOOKIE`
+- `TINYAUTH_TRUSTED_PROXIES` -> `TINYAUTH_AUTH_TRUSTEDPROXIES`
+- `TINYAUTH_DB_FILE` -> `TINYAUTH_DATABASE_PATH=/data/<file>`
+
+## Tạo bcrypt user
+
+```bash
+docker run -it --rm ghcr.io/steveiliop56/tinyauth:v5 user create --interactive
+```
+
+Chọn tùy chọn `format for Docker`, rồi đưa output vào `TINYAUTH_USERS`. Không dùng plain password như `admin:changeme`.
+
 ## OAuth ENV phổ biến
+- `TINYAUTH_OAUTH_AUTO_REDIRECT`: `none`, `github`, `google`, `generic`, hoặc provider id khác.
+- `TINYAUTH_OAUTH_WHITELIST`: whitelist email/domain/regex cho OAuth.
 - Google:
   - `TINYAUTH_GOOGLE_CLIENT_ID`
   - `TINYAUTH_GOOGLE_CLIENT_SECRET`
@@ -1978,32 +2125,39 @@ Giữ label `reverse_proxy` của service như cũ.
   - `TINYAUTH_GITHUB_CLIENT_ID`
   - `TINYAUTH_GITHUB_CLIENT_SECRET`
   - OAuth Apps: https://github.com/settings/developers
-- Generic OIDC:
-  - `TINYAUTH_OIDC_ISSUER`
-  - `TINYAUTH_OIDC_CLIENT_ID`
-  - `TINYAUTH_OIDC_CLIENT_SECRET`
-  - `TINYAUTH_OIDC_SCOPES`, default `openid email profile`
-
-## Access control ENV phổ biến
-- `TINYAUTH_ALLOWED_USERS`: danh sách email/user được phép.
-- `TINYAUTH_ALLOWED_DOMAINS`: danh sách domain email được phép.
-- `TINYAUTH_ALLOWED_GROUPS`: danh sách group được phép nếu provider hỗ trợ.
+- Generic OAuth/OIDC:
+  - `TINYAUTH_GENERIC_CLIENT_ID`
+  - `TINYAUTH_GENERIC_CLIENT_SECRET`
+  - `TINYAUTH_GENERIC_AUTH_URL`
+  - `TINYAUTH_GENERIC_TOKEN_URL`
+  - `TINYAUTH_GENERIC_USER_INFO_URL`
+  - `TINYAUTH_GENERIC_SCOPES`
+  - `TINYAUTH_GENERIC_REDIRECT_URL`
+  - `TINYAUTH_GENERIC_NAME`
 
 ## Quy trình triển khai
-1. Điền `TINYAUTH_SECRET` bằng secret mạnh.
-2. Chọn auth mode:
-   - Static user: điền `TINYAUTH_USERS`.
-   - OAuth: điền provider env + `TINYAUTH_OAUTH_AUTO_REDIRECT` nếu muốn auto redirect.
-3. Đảm bảo `LITESTREAM_REPLICATE_DBS` có `tinyauth` nếu muốn backup DB auth.
-4. Lần đầu deploy: `LITESTREAM_INIT_MODE=true`.
-5. Sau khi login/config ổn: đổi `LITESTREAM_INIT_MODE=false` để các lần deploy sau bắt buộc restore.
-6. Chạy: `bash docker-compose/scripts/dc.sh up -d --build --remove-orphans`.
+1. Điền `TINYAUTH_APP_URL` bằng URL HTTPS public.
+2. Generate bcrypt user riêng cho deployment và cập nhật `TINYAUTH_USERS`.
+3. Giữ `TINYAUTH_COOKIE_SECURE=true` và cấu hình `TINYAUTH_TRUSTED_PROXIES`.
+4. Đảm bảo `LITESTREAM_REPLICATE_DBS` có `tinyauth` nếu muốn backup DB auth.
+5. Lần đầu deploy: `LITESTREAM_INIT_MODE=true`.
+6. Sau khi login/config ổn: đổi `LITESTREAM_INIT_MODE=false` để các lần deploy sau bắt buộc restore.
+7. Chạy: `bash docker-compose/scripts/dc.sh up -d --build --remove-orphans`.
 
 ## Vận hành
 - Logs: `bash docker-compose/scripts/dc.sh logs -f tinyauth`.
 - Restart: `bash docker-compose/scripts/dc.sh restart tinyauth`.
 - DB nằm ở `${DOCKER_VOLUMES_ROOT}/tinyauth/${TINYAUTH_DB_FILE}`.
 - Không xóa DB local khi `LITESTREAM_INIT_MODE=false` nếu chưa chắc replica S3 restore được.
+
+## Legacy cần bỏ
+- `TINYAUTH_SECRET`
+- `TINYAUTH_DISABLE_CONTINUE`
+- `TINYAUTH_TRUST_PROXY`
+- `TINYAUTH_ALLOWED_USERS`
+- `TINYAUTH_ALLOWED_DOMAINS`
+- `TINYAUTH_ALLOWED_GROUPS`
+- `TINYAUTH_OIDC_ISSUER`, `TINYAUTH_OIDC_CLIENT_ID`, `TINYAUTH_OIDC_CLIENT_SECRET`, `TINYAUTH_OIDC_SCOPES`
 ```
 
 ### `docs/services/litestream.md`

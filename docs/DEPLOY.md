@@ -50,9 +50,10 @@ Các biến dưới đây nếu thiếu/sai sẽ **dừng deploy** ở bước v
 - `CADDY_EMAIL`
 - `TINYAUTH_APP_URL`
 - `TINYAUTH_PORT`
-- `TINYAUTH_SECRET`
 - `TINYAUTH_DB_FILE`
 - `TINYAUTH_USERS`
+- `TINYAUTH_COOKIE_SECURE`
+- `TINYAUTH_TRUSTED_PROXIES`
 - `APP_PORT`
 
 Thêm nữa, do mount bắt buộc trong `cloudflared`:
@@ -129,10 +130,16 @@ Routing dựa labels trong compose:
 - WebSSH: `ttyd.${PROJECT_NAME}.${DOMAIN}`
 - Deploy Code: `deploy.${DOMAIN}` (khi `DOCKER_DEPLOY_CODE_ENABLED=true`)
 
-Auth cơ bản dùng:
+Auth dùng Tinyauth qua Caddy `forward_auth`:
 
-- User: `CADDY_AUTH_USER`
-- Hash: `CADDY_AUTH_HASH`
+```yaml
+- "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
+- "caddy.forward_auth.uri=/api/auth/caddy"
+- "caddy.forward_auth.header_up=X-Forwarded-Proto https"
+- "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
+```
+
+`TINYAUTH_APP_URL` phải là `https://auth.<domain>` và `TINYAUTH_USERS` phải dùng bcrypt hash, không dùng plain password.
 
 ## 7) Lệnh deploy đề xuất
 

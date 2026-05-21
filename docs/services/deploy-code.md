@@ -91,7 +91,7 @@ Các thao tác chính trong UI:
 
 File `.http` để kiểm thử nhanh trong IDE:
 
-- `docs/.http/deploy-code.cloudflared.http`: gọi qua `https://deploy.${DOMAIN}` và Caddy Basic Auth.
+- `docs/.http/deploy-code.cloudflared.http`: gọi qua `https://deploy.${DOMAIN}` và Tinyauth.
 - `docs/.http/deploy-code.tailscale.http`: gọi direct qua `http://${PROJECT_NAME_TAILSCALE}.${TAILSCALE_TAILNET_DOMAIN}:${DOCKER_DEPLOY_CODE_HOST_PORT}`.
 
 API direct tương ứng:
@@ -121,7 +121,7 @@ curl -H "x-deploy-code-token: $DOCKER_DEPLOY_CODE_API_TOKEN" \
 
 ## Safety notes
 
-- Service mount Docker socket, nên quyền rất cao. Chỉ bật khi cần và luôn dùng Caddy Basic Auth + API token nếu expose qua Cloudflared.
+- Service mount Docker socket, nên quyền rất cao. Chỉ bật khi cần và luôn dùng Tinyauth + API token nếu expose qua Cloudflared.
 - `DOCKER_DEPLOY_CODE_CONTAINER_ALLOW_ALL=false` là mặc định an toàn. Chỉ thêm service/container cần vận hành vào allowlist.
 - Git deploy có bước `git reset --hard <remote>/<branch>`. Trước khi dùng trên môi trường có thay đổi local chưa commit, hãy commit/stash/push trước.
 - ZIP deploy mặc định exclude `.git`, `.env`, `.docker-volumes`, `node_modules`; giữ nguyên các exclude này trừ khi thật sự cần đổi.

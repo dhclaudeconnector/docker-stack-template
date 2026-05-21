@@ -2,6 +2,7 @@
 "use strict";
 
 const fs = require("fs");
+const net = require("net");
 const path = require("path");
 
 const envPath = path.resolve(process.cwd(), ".env");
@@ -115,6 +116,69 @@ function isValidHttpsJsonUrl(v) {
   }
 }
 
+function isValidHttpsOrigin(v) {
+  try {
+    const u = new URL(v);
+    if (u.protocol !== "https:") return "must start with https://";
+    if (u.pathname !== "/" || u.search || u.hash) {
+      return "must be an origin URL only, e.g. https://auth.example.com";
+    }
+    if (v.endsWith("/")) return "must not end with /";
+    return null;
+  } catch {
+    return "must be a valid https URL";
+  }
+}
+
+function normalizeDockerEscapedDollar(v) {
+  return String(v || "").replace(/\$\$/g, "$");
+}
+
+const TINYAUTH_EXAMPLE_BCRYPT_HASH = "$2a$10$UdLYoJ5lgPsC0RKqYH/jMua7zIn0g9kPqWmhYayJYLaZQ/FTmH2/u";
+
+function validateTinyauthUsers(v) {
+  const users = v.split(",").map((part) => part.trim()).filter(Boolean);
+  if (!users.length) return "must contain at least one user";
+
+  for (const entry of users) {
+    const parts = entry.split(":");
+    const username = (parts[0] || "").trim();
+    const hash = normalizeDockerEscapedDollar(parts[1] || "");
+    if (!username || parts.length < 2) {
+      return "each entry must use username:bcrypt_hash[:totp]";
+    }
+    if (!/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash)) {
+      return "password must be a bcrypt hash, not a plain password";
+    }
+    if (hash === TINYAUTH_EXAMPLE_BCRYPT_HASH) {
+      return "uses the bundled example bcrypt hash; generate a deployment-specific hash";
+    }
+  }
+
+  return null;
+}
+
+function validateTrustedProxies(v) {
+  const entries = v.split(",").map((part) => part.trim()).filter(Boolean);
+  if (!entries.length) return "must contain at least one IP/CIDR";
+
+  for (const entry of entries) {
+    const [ip, prefix, extra] = entry.split("/");
+    if (extra !== undefined || !net.isIP(ip)) {
+      return `invalid IP/CIDR entry: ${entry}`;
+    }
+    if (prefix !== undefined) {
+      const n = Number(prefix);
+      const max = net.isIP(ip) === 4 ? 32 : 128;
+      if (!Number.isInteger(n) || n < 0 || n > max) {
+        return `invalid CIDR prefix in entry: ${entry}`;
+      }
+    }
+  }
+
+  return null;
+}
+
 function buildAppHost(project, domain) {
   const p = (project || "").trim().toLowerCase();
   const d = (domain || "").trim().toLowerCase();
@@ -130,18 +194,46 @@ checkRequired("PROJECT_NAME", "docker project/network + subdomain prefix", (v) =
 );
 checkRequired("DOMAIN", "root domain", isValidDomain);
 checkRequired("CADDY_EMAIL", "caddy email label", (v) => (v.includes("@") ? null : "invalid email"));
-checkRequired("TINYAUTH_APP_URL", "public Tinyauth URL", (v) =>
-  v.startsWith("http://") || v.startsWith("https://") ? null : "must start with http:// or https://"
-);
+checkRequired("TINYAUTH_APP_URL", "public HTTPS Tinyauth URL", isValidHttpsOrigin);
 checkPort("TINYAUTH_PORT", true);
-checkRequired("TINYAUTH_SECRET", "session/cookie signing secret", (v) =>
-  v.length >= 24 ? null : "must be at least 24 characters"
+checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file", (v) =>
+  v.includes("/") || v.includes("\\") ? "must be a filename, not a path" : null
 );
-if ((env.TINYAUTH_SECRET || "").includes("change-me")) {
-  warnings.push("TINYAUTH_SECRET uses example default -> replace before public deploy");
+checkRequired("TINYAUTH_USERS", "static users in username:bcrypt_hash format", validateTinyauthUsers);
+checkRequired("TINYAUTH_COOKIE_SECURE", "secure cookie toggle", (v) => (isBool(v) ? null : "must be true|false"));
+checkRequired("TINYAUTH_TRUSTED_PROXIES", "trusted Caddy/Cloudflared/Tailscale proxy CIDRs", validateTrustedProxies);
+checkOptional("TINYAUTH_OAUTH_AUTO_REDIRECT", "none|github|google|generic", (v) =>
+  v === "none" || /^[a-z][a-z0-9_-]*$/.test(v) ? null : "must be none or a provider id"
+);
+checkOptional("TINYAUTH_OAUTH_WHITELIST", "comma-separated OAuth email/domain/regex whitelist");
+for (const [name, clientKey, secretKey] of [
+  ["Google", "TINYAUTH_GOOGLE_CLIENT_ID", "TINYAUTH_GOOGLE_CLIENT_SECRET"],
+  ["GitHub", "TINYAUTH_GITHUB_CLIENT_ID", "TINYAUTH_GITHUB_CLIENT_SECRET"],
+  ["Generic", "TINYAUTH_GENERIC_CLIENT_ID", "TINYAUTH_GENERIC_CLIENT_SECRET"],
+]) {
+  const clientId = (env[clientKey] || "").trim();
+  const clientSecret = (env[secretKey] || "").trim();
+  if (clientId || clientSecret) {
+    if (!clientId || !clientSecret) errors.push(`${name} OAuth requires both ${clientKey} and ${secretKey}`);
+    else ok.push(`${name} OAuth client/secret=OK (optional)`);
+  }
 }
-checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file");
-checkRequired("TINYAUTH_USERS", "at least one static user or deployment default");
+for (const key of [
+  "TINYAUTH_SECRET",
+  "TINYAUTH_DISABLE_CONTINUE",
+  "TINYAUTH_TRUST_PROXY",
+  "TINYAUTH_ALLOWED_USERS",
+  "TINYAUTH_ALLOWED_DOMAINS",
+  "TINYAUTH_ALLOWED_GROUPS",
+  "TINYAUTH_OIDC_ISSUER",
+  "TINYAUTH_OIDC_CLIENT_ID",
+  "TINYAUTH_OIDC_CLIENT_SECRET",
+  "TINYAUTH_OIDC_SCOPES",
+]) {
+  if ((env[key] || "").trim()) {
+    warnings.push(`${key} is legacy/deprecated for Tinyauth v5 and is not passed to the tinyauth container`);
+  }
+}
 checkPort("APP_PORT", true);
 
 // 2) Optional env from compose files

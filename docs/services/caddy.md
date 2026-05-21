@@ -30,5 +30,6 @@
 ```yaml
 - "caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}"
 - "caddy.forward_auth.uri=/api/auth/caddy"
+- "caddy.forward_auth.header_up=X-Forwarded-Proto https"
 - "caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups"
 ```
