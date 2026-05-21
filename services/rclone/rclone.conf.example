@@ -1,0 +1,49 @@
+# ================================================================
+#  rclone.conf — cấu hình rclone cho docker-stack
+#
+#  QUAN TRỌNG: File này chứa credentials. KHÔNG commit lên git.
+#  Thêm vào .gitignore: services/rclone/rclone.conf
+#
+#  Cách dùng:
+#    1. Copy file này: cp services/rclone/rclone.conf.example services/rclone/rclone.conf
+#    2. Điền thông tin remote thật vào [remote_store]
+#    3. Khởi động: ENABLE_RCLONE=true trong .env
+# ================================================================
+
+# ── 1. Local alias — trỏ vào .docker-volumes (mount tại /data) ──
+[local_data]
+type = alias
+remote = /data
+
+# ── 2. Remote thật — thay bằng loại remote bạn dùng ────────────
+# Ví dụ S3-compatible (Cloudflare R2, Backblaze B2, MinIO, AWS S3):
+[remote_store]
+type = s3
+provider = Other
+env_auth = false
+access_key_id = REPLACE_ME
+secret_access_key = REPLACE_ME
+endpoint = https://REPLACE_ME.r2.cloudflarestorage.com
+bucket = REPLACE_ME
+
+# Ví dụ SFTP (bỏ comment để dùng, xóa block s3 ở trên):
+# [remote_store]
+# type = sftp
+# host = your-server.example.com
+# user = your-user
+# key_file = /config/rclone/id_rsa
+
+# ── 3. Union remote — join group (hợp nhất local + remote) ──────
+#
+#  list_action = join  → khi list, trả về union của tất cả remotes
+#  create_policy = all → tạo file/thư mục mới trên tất cả remotes
+#  action_policy = all → thao tác (xóa, sửa) áp lên tất cả remotes
+#
+#  Vì sync chạy local → remote_store (một chiều),
+#  union remote chủ yếu dùng để đọc/kiểm tra trạng thái tổng hợp.
+[combined]
+type = union
+remotes = local_data: remote_store:
+list_action = join
+action_policy = all
+create_policy = all

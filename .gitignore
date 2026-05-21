@@ -8,6 +8,8 @@ project-api.http
 cloudflared-credentials.json
 cloudflared/creds.json
 services/webssh/.ssh/
+# rclone config chứa credentials — không commit
+services/rclone/rclone.conf
 
 # ── Generated at runtime ──────────────────────────────────────────
 logs/app/

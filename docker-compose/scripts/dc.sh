@@ -90,7 +90,8 @@ prepare_docker_volume_dirs() {
     "$volume_root/tailscale/var-lib" \
     "$volume_root/deploy-code/logs" \
     "$volume_root/deploy-code/backups" \
-    "$volume_root/deploy-code/tmp"
+    "$volume_root/deploy-code/tmp" \
+    "$volume_root/rclone/cache"
 
   if [ "${DC_VERBOSE:-0}" = "1" ]; then
     echo "  DATA_ROOT : $volume_root"
@@ -219,6 +220,10 @@ if [ "${DOCKER_DEPLOY_CODE_ENABLED:-false}" = "true" ]; then
   PROFILE_ARGS+=(--profile deploy-code)
 fi
 
+if [ "${ENABLE_RCLONE:-false}" = "true" ]; then
+  PROFILE_ARGS+=(--profile rclone)
+fi
+
 if [ "${ENABLE_TAILSCALE:-false}" = "true" ] && should_render_tailscale_serve "${1:-}"; then
   render_tailscale_serve_config
 fi
@@ -232,6 +237,7 @@ FILES=(
   -f "$ROOT_DIR/docker-compose/compose.ops.yml"
   -f "$ROOT_DIR/docker-compose/compose.access.yml"
   -f "$ROOT_DIR/docker-compose/compose.deploy.yml"
+  -f "$ROOT_DIR/docker-compose/compose.rclone.yml"
   -f "$ROOT_DIR/compose.apps.yml"
 )
 
