@@ -39,6 +39,10 @@ Replace only the application layer while preserving Core/Ops/Access logic.
 - `docs/services/app.md`
 - `docs/services/litestream.md` (if app uses SQLite)
 - `docs/services/tinyauth.md` (if auth labels/env change)
+- `docker-compose/compose.rclone.yml` (if rclone configuration changes)
+- `services/rclone/rclone.conf.example` (if remote storage targets change)
+- `services/rclone/entrypoint.sh` (if rclone sync logic needs adjustment)
+- `docs/services/rclone.md` (for rclone sync documentation updates)
 
 ## 4) Required Validation Commands
 
@@ -120,7 +124,7 @@ Plus:
 - `DIRECTORY_STRUCTURE` snapshot (tree, depth-limited)
 
 <!-- BEGIN:EMBEDDED_FILES -->
-Generated at: 2026-05-21T08:50:03.208Z
+Generated at: 2026-05-21T12:33:12.356Z
 Use this snapshot as direct editing context.
 
 ### `DIRECTORY_STRUCTURE`
@@ -162,6 +166,7 @@ Use this snapshot as direct editing context.
     - compose.core.yml
     - compose.deploy.yml
     - compose.ops.yml
+    - compose.rclone.yml
   - docs/
     - .http/
       - deploy-code.cloudflared.http
@@ -174,6 +179,7 @@ Use this snapshot as direct editing context.
       - dozzle.md
       - filebrowser.md
       - litestream.md
+      - rclone.md
       - tailscale.md
       - tinyauth.md
       - webssh.md
@@ -198,6 +204,10 @@ Use this snapshot as direct editing context.
     - litestream/
       - entrypoint.sh
       - litestream.yml
+    - rclone/
+      - entrypoint.sh
+      - rclone.conf
+      - rclone.conf.example
     - webssh/
       - Dockerfile
   - tailscale/
@@ -333,6 +343,41 @@ LITESTREAM_SYNC_INTERVAL=5s
 LITESTREAM_SNAPSHOT_INTERVAL=30m
 LITESTREAM_RETENTION=48h
 LITESTREAM_RETENTION_CHECK_INTERVAL=1h
+
+# ================================================================
+#  RCLONE — Sync .docker-volumes lên remote mỗi 20s
+#  Local (.docker-volumes) là nguồn sự thật (primary storage).
+#  Remote là đích backup/sync (một chiều: local → remote).
+#  Union remote dùng list_action=join để hợp nhất file listing.
+#
+#  Bước setup:
+#    1. cp services/rclone/rclone.conf.example services/rclone/rclone.conf
+#    2. Điền thông tin remote vào [remote_store] trong rclone.conf
+#    3. Đặt RCLONE_REMOTE_TARGET=remote_store:tên-bucket/data
+#    4. Bật ENABLE_RCLONE=true
+# ================================================================
+ENABLE_RCLONE=false
+
+# Remote đích — format: <tên remote trong rclone.conf>:<bucket hoặc path>
+# Ví dụ S3/R2:   remote_store:my-bucket/docker-volumes
+# Ví dụ SFTP:    remote_store:/backups/docker-volumes
+RCLONE_REMOTE_TARGET=remote_store:replace-me/docker-volumes
+
+# Khoảng thời gian giữa 2 lần sync (giây). Mặc định: 20
+RCLONE_SYNC_INTERVAL_SEC=20
+
+# Thư mục local trong container (không đổi nếu không có lý do đặc biệt)
+RCLONE_LOCAL_PATH=/data
+
+# Log level: NOTICE (mặc định) | INFO | DEBUG
+RCLONE_LOG_LEVEL=NOTICE
+
+# Chạy thử không ghi thật (true/false). Dùng để kiểm tra trước khi bật thật.
+RCLONE_DRY_RUN=false
+
+# Cờ bổ sung cho rclone sync (tùy chọn, để trống nếu không cần)
+# Ví dụ: --exclude "*.tmp" --bwlimit 10M --exclude ".git/**"
+RCLONE_EXTRA_FLAGS=
 
 # ================================================================
 #  APPLICATION — Change these per deployment
@@ -1155,6 +1200,51 @@ volumes:
   tailscale-socket:
 ```
 
+### `docker-compose/compose.rclone.yml`
+```yaml
+# ================================================================
+#  compose.rclone.yml — rclone sync sidecar
+#  Sync .docker-volumes lên remote mỗi RCLONE_SYNC_INTERVAL_SEC giây.
+#
+#  Local làm nguồn sự thật (primary), remote là backup đích.
+#  Union remote (combined) dùng list_action=join để hợp nhất listing.
+#
+#  Bật qua: ENABLE_RCLONE=true trong .env
+#
+#  Env bắt buộc:
+#    RCLONE_REMOTE_TARGET — vd: remote_store:bucket/data
+#  Env tùy chọn:
+#    RCLONE_SYNC_INTERVAL_SEC, RCLONE_LOG_LEVEL, RCLONE_DRY_RUN,
+#    RCLONE_EXTRA_FLAGS, RCLONE_LOCAL_PATH
+# ================================================================
+
+services:
+  rclone:
+    container_name: "rclone"
+    profiles: [rclone]
+    image: rclone/rclone:latest
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    env_file:
+      - ./.env
+    environment:
+      RCLONE_SYNC_INTERVAL_SEC: "${RCLONE_SYNC_INTERVAL_SEC:-20}"
+      RCLONE_LOCAL_PATH: "${RCLONE_LOCAL_PATH:-/data}"
+      RCLONE_REMOTE_TARGET: "${RCLONE_REMOTE_TARGET}"
+      RCLONE_CONFIG_PATH: "/config/rclone/rclone.conf"
+      RCLONE_LOG_LEVEL: "${RCLONE_LOG_LEVEL:-NOTICE}"
+      RCLONE_DRY_RUN: "${RCLONE_DRY_RUN:-false}"
+      RCLONE_EXTRA_FLAGS: "${RCLONE_EXTRA_FLAGS:-}"
+    volumes:
+      # Config rclone (chứa credentials — không commit)
+      - ./services/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      # Entrypoint script
+      - ./services/rclone/entrypoint.sh:/entrypoint.sh:ro
+      # Mount toàn bộ .docker-volumes làm data source
+      - ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}:/data
+    networks: [app_net]
+    restart: unless-stopped
+```
+
 ### `docker-compose/scripts/dc.sh`
 ```bash
 #!/usr/bin/env bash
@@ -1249,7 +1339,8 @@ prepare_docker_volume_dirs() {
     "$volume_root/tailscale/var-lib" \
     "$volume_root/deploy-code/logs" \
     "$volume_root/deploy-code/backups" \
-    "$volume_root/deploy-code/tmp"
+    "$volume_root/deploy-code/tmp" \
+    "$volume_root/rclone/cache"
 
   if [ "${DC_VERBOSE:-0}" = "1" ]; then
     echo "  DATA_ROOT : $volume_root"
@@ -1378,6 +1469,10 @@ if [ "${DOCKER_DEPLOY_CODE_ENABLED:-false}" = "true" ]; then
   PROFILE_ARGS+=(--profile deploy-code)
 fi
 
+if [ "${ENABLE_RCLONE:-false}" = "true" ]; then
+  PROFILE_ARGS+=(--profile rclone)
+fi
+
 if [ "${ENABLE_TAILSCALE:-false}" = "true" ] && should_render_tailscale_serve "${1:-}"; then
   render_tailscale_serve_config
 fi
@@ -1391,6 +1486,7 @@ FILES=(
   -f "$ROOT_DIR/docker-compose/compose.ops.yml"
   -f "$ROOT_DIR/docker-compose/compose.access.yml"
   -f "$ROOT_DIR/docker-compose/compose.deploy.yml"
+  -f "$ROOT_DIR/docker-compose/compose.rclone.yml"
   -f "$ROOT_DIR/compose.apps.yml"
 )
 
@@ -2271,5 +2367,69 @@ LITESTREAM_REPLICATE_DBS=tinyauth,myapp
 - Logs restore/replicate: `bash docker-compose/scripts/dc.sh logs -f litestream litestream-restore`.
 - Kiểm tra container: `bash docker-compose/scripts/dc.sh ps`.
 - Không chạy `down -v` nếu chưa chắc replica S3 đã ổn.
+```
+
+### `docs/services/rclone.md`
+```text
+# Rclone sync service (`docker-compose/compose.rclone.yml`)
+
+## Vai trò
+- Đồng bộ một chiều định kỳ dữ liệu từ thư mục `.docker-volumes/` (local) lên remote storage (S3-compatible, SFTP, v.v.).
+- Sử dụng cấu hình `rclone.conf` để quản lý thông tin credentials và cấu hình các loại remote khác nhau.
+- Hỗ trợ union remote (`type = union` với `list_action = join`) để hợp nhất danh sách tập tin giữa local và remote khi truy vấn.
+- Thích hợp để làm giải pháp backup tự động cho toàn bộ dữ liệu runtime của dự án.
+
+## Compose layer
+- File: `docker-compose/compose.rclone.yml`.
+- Kích hoạt qua cờ `ENABLE_RCLONE=true` trong file `.env`.
+- Service chạy độc lập ở chế độ nền (sidecar), không chặn hoặc phụ thuộc vào các dịch vụ ứng dụng khác.
+
+## Services
+### `rclone`
+- Image: `rclone/rclone:latest`
+- Profile: `rclone`
+- Entrypoint: `/entrypoint.sh` mount từ `services/rclone/entrypoint.sh`.
+- Volumes mount:
+  - Cấu hình: `./services/rclone/rclone.conf` vào `/config/rclone/rclone.conf:ro`.
+  - Script chạy: `./services/rclone/entrypoint.sh` vào `/entrypoint.sh:ro`.
+  - Dữ liệu: `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}` vào `/data`.
+
+## File cấu hình
+- `services/rclone/rclone.conf.example`: File mẫu chứa định nghĩa 3 block remote:
+  - `[local_data]`: Alias trỏ vào dữ liệu mount tại `/data`.
+  - `[remote_store]`: Cấu hình S3/SFTP remote đích (cần điền thông tin thật).
+  - `[combined]`: Union remote ghép `local_data` và `remote_store`.
+- `services/rclone/entrypoint.sh`: Chứa script bash validate các biến môi trường và chạy vòng lặp vô hạn `rclone sync` mỗi `RCLONE_SYNC_INTERVAL_SEC` giây.
+
+## ENV bắt buộc
+- `ENABLE_RCLONE`: `true|false`, bật/tắt profile Rclone trong `dc.sh`.
+- `RCLONE_REMOTE_TARGET`: Remote đích để đồng bộ, định dạng: `remote_name:path/to/bucket` (ví dụ: `remote_store:my-bucket/docker-volumes`).
+
+## ENV tùy chọn
+- `RCLONE_SYNC_INTERVAL_SEC`: Giây giữa 2 lần sync (mặc định: `20`).
+- `RCLONE_LOCAL_PATH`: Thư mục dữ liệu nguồn trong container (mặc định: `/data`).
+- `RCLONE_LOG_LEVEL`: Mức độ ghi log của rclone (mặc định: `NOTICE`).
+- `RCLONE_DRY_RUN`: Chạy thử nghiệm không ghi dữ liệu thật (`true|false`, mặc định: `false`).
+- `RCLONE_EXTRA_FLAGS`: Các tham số bổ sung cho lệnh rclone sync (ví dụ: `--exclude "*.tmp"`).
+
+## Hướng dẫn setup và sử dụng
+1. Copy cấu hình mẫu thành cấu hình thật:
+   ```bash
+   cp services/rclone/rclone.conf.example services/rclone/rclone.conf
+   ```
+2. Điền thông tin kết nối remote thật của bạn vào block `[remote_store]` trong `services/rclone/rclone.conf`.
+3. Bật cấu hình và thiết lập remote đích trong `.env`:
+   ```env
+   ENABLE_RCLONE=true
+   RCLONE_REMOTE_TARGET=remote_store:ten-bucket-cua-ban/docker-volumes
+   ```
+4. Khởi động dịch vụ:
+   ```bash
+   bash docker-compose/scripts/dc.sh up -d rclone
+   ```
+5. Kiểm tra log đồng bộ:
+   ```bash
+   bash docker-compose/scripts/dc.sh logs -f rclone
+   ```
 ```
 <!-- END:EMBEDDED_FILES -->
