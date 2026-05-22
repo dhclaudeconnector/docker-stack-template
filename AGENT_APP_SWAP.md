@@ -124,7 +124,7 @@ Plus:
 - `DIRECTORY_STRUCTURE` snapshot (tree, depth-limited)
 
 <!-- BEGIN:EMBEDDED_FILES -->
-Generated at: 2026-05-21T12:33:12.356Z
+Generated at: 2026-05-22T07:33:37.556Z
 Use this snapshot as direct editing context.
 
 ### `DIRECTORY_STRUCTURE`
@@ -2115,7 +2115,25 @@ restore_db() {
   mkdir -p "$(dirname "$db_path")"
 
   if [ "${LITESTREAM_INIT_MODE:-false}" = "true" ]; then
-    echo "[INIT MODE] Skip restore for ${name}: ${db_path}"
+    if [ -f "$db_path" ]; then
+      echo "[ERROR] LITESTREAM_INIT_MODE=true but database file already exists: ${db_path}."
+      echo "        Exiting with error to stop and check manually to prevent data loss."
+      exit 1
+    fi
+    echo "[RESTORE] Forced restore in INIT MODE for ${name}: ${db_path}"
+    if ! litestream restore -config "$CONFIG_PATH" -if-replica-exists "$db_path"; then
+      echo "[ERROR] Forced restore failed for ${name} in INIT MODE."
+      exit 1
+    fi
+    if [ ! -f "$db_path" ]; then
+      echo "[ERROR] Replica not found for ${name} in INIT MODE. Forced restore failed."
+      exit 1
+    fi
+    return 0
+  fi
+
+  if [ -f "$db_path" ]; then
+    echo "[RESTORE] Database already exists, skipping restore for ${name}: ${db_path}"
     return 0
   fi
 

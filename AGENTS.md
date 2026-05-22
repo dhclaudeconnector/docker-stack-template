@@ -34,4 +34,4 @@ Formatting rules:
 
 ## 3) Completion gate
 
-The AI Agent should treat the task as incomplete until `.opushforce.message` is updated to reflect the latest work.
+The AI Agent should treat the task as incomplete until `.opushforce.message` is updated (write or append) to reflect the latest work.
