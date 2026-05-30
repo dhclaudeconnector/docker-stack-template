@@ -241,6 +241,12 @@ FILES=(
   -f "$ROOT_DIR/compose.apps.yml"
 )
 
+# Khi rclone bật, nạp thêm gate override để các service quan trọng
+# depends_on rclone-restore (đảm bảo data có sẵn trước khi start).
+if [ "${ENABLE_RCLONE:-false}" = "true" ]; then
+  FILES+=( -f "$ROOT_DIR/docker-compose/compose.rclone-gate.yml" )
+fi
+
 # ── Debug info (set DC_VERBOSE=1 to show) ─────────────────────
 if [ "${DC_VERBOSE:-0}" = "1" ]; then
   echo "── dc.sh debug ──────────────────────────────────"
