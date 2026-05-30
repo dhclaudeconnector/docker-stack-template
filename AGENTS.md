@@ -35,3 +35,18 @@ Formatting rules:
 ## 3) Completion gate
 
 The AI Agent should treat the task as incomplete until `.opushforce.message` is updated (write or append) to reflect the latest work.
+
+## 4) CodeGraph MCP usage
+
+- This repo has CodeGraph initialized at `.codegraph/`.
+- When CodeGraph MCP tools are available, use them first for code discovery and impact analysis.
+- Use lightweight CodeGraph lookups directly for targeted work:
+  - `codegraph_search`
+  - `codegraph_callers`
+  - `codegraph_callees`
+  - `codegraph_impact`
+  - `codegraph_node`
+  - `codegraph_status`
+  - `codegraph_files`
+- Avoid using large context/explore calls in the main session unless the task truly needs broad source context.
+- If CodeGraph tools are unavailable in a session, verify `~/.codex/config.toml` has the `mcp_servers.codegraph` entry and restart Codex so the MCP server is loaded.

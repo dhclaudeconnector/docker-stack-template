@@ -1,6 +1,7 @@
 project-api.http
 *credentials.json
 -gitignore/**
+.antigravitycli/**
 # ── Secrets (NEVER commit) ───────────────────────────────────────
 .env
 .env.local

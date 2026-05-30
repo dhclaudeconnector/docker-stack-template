@@ -1,4 +1,14 @@
 #!/bin/sh
+# ================================================================
+#  entrypoint.sh — Litestream restore + replicate
+#
+#  Logic tự động (không cần INIT_MODE):
+#    - S3 trống / chưa có backup → fresh start, app tự tạo DB mới
+#    - S3 đã có backup           → bắt buộc restore thành công
+#    - DB local đã tồn tại       → skip restore (đã có sẵn)
+#
+#  Để reset S3 khi cần: chạy scripts/reset-s3.sh
+# ================================================================
 set -e
 
 CONFIG_PATH="${LITESTREAM_CONFIG_PATH:-/etc/litestream.yml}"
@@ -9,42 +19,30 @@ restore_db() {
   db_path="$2"
   mkdir -p "$(dirname "$db_path")"
 
-  if [ "${LITESTREAM_INIT_MODE:-false}" = "true" ]; then
-    if [ -f "$db_path" ]; then
-      echo "[ERROR] LITESTREAM_INIT_MODE=true but database file already exists: ${db_path}."
-      echo "        Exiting with error to stop and check manually to prevent data loss."
-      exit 1
-    fi
-    echo "[RESTORE] Forced restore in INIT MODE for ${name}: ${db_path}"
-    if ! litestream restore -config "$CONFIG_PATH" -if-replica-exists "$db_path"; then
-      echo "[ERROR] Forced restore failed for ${name} in INIT MODE."
-      exit 1
-    fi
-    if [ ! -f "$db_path" ]; then
-      echo "[ERROR] Replica not found for ${name} in INIT MODE. Forced restore failed."
-      exit 1
-    fi
-    return 0
-  fi
-
+  # ── DB local đã tồn tại → skip ───────────────────────────────────────
   if [ -f "$db_path" ]; then
-    echo "[RESTORE] Database already exists, skipping restore for ${name}: ${db_path}"
+    echo "[RESTORE] ✓ ${name}: database already exists locally, skipping restore."
     return 0
   fi
 
-  echo "[RESTORE] ${name}: ${db_path}"
+  # ── Thử restore từ S3 (tự động detect có hay không) ──────────────────
+  echo "[RESTORE] ${name}: checking S3 for existing replica..."
   if ! litestream restore -config "$CONFIG_PATH" -if-replica-exists "$db_path"; then
-    echo "[ERROR] Restore failed for ${name}. Set LITESTREAM_INIT_MODE=true only for first initialization."
+    # Restore command thất bại thật sự (network, credentials, v.v.)
+    echo "[ERROR] ${name}: restore command failed. Check S3 credentials/endpoint/network."
     exit 1
   fi
 
-  if [ ! -f "$db_path" ]; then
-    echo "[ERROR] Replica not found for ${name}. Startup blocked to avoid data loss."
-    echo "        First deploy: set LITESTREAM_INIT_MODE=true, initialize app, then set false."
-    exit 1
+  # ── Kiểm tra kết quả ─────────────────────────────────────────────────
+  if [ -f "$db_path" ]; then
+    echo "[RESTORE] ✓ ${name}: restored successfully from S3."
+  else
+    # S3 trống → fresh start, app sẽ tự tạo DB rồi litestream sync lên
+    echo "[RESTORE] ℹ ${name}: no replica found on S3. Fresh start — app will create a new database."
   fi
 }
 
+# ── Restore từng DB được cấu hình ────────────────────────────────────────
 case ",$REPLICATE_DBS," in
   *,tinyauth,*) restore_db "tinyauth" "/data/tinyauth/${TINYAUTH_DB_FILE:-tinyauth.db}" ;;
 esac
@@ -53,6 +51,7 @@ case ",$REPLICATE_DBS," in
   *,app,*) restore_db "app" "/data/app/${LITESTREAM_APP_DB_FILE:-app.db}" ;;
 esac
 
+# ── Chế độ restore-only (dùng bởi service litestream-restore) ────────────
 if [ "${1:-}" = "restore-only" ]; then
   echo "[RESTORE] Completed for: ${REPLICATE_DBS}"
   exit 0
