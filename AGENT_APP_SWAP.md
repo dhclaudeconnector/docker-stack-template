@@ -5,27 +5,57 @@ Single-file contract for replacing the `app` service with minimal prompt tokens.
 ## 1) How To Use
 
 1. Run `npm run agent-app-swap:sync` before sending this file to an agent.
-2. Send this file and one short task prompt (use template below).
+2. Send this file and one short task prompt (use the Prompt Template in section 7).
 3. Apply returned full files into your source tree (copy-paste replace).
 
 ## 2) Scope And Invariants
 
 ### Goal
 
-Replace only the application layer while preserving Core/Ops/Access logic.
+Replace only the application layer while preserving Core/Ops/Access/Auth logic.
 
-### Must keep
+### Must Keep (NEVER Violate)
 
-1. Service name stays `app`.
-2. `app` stays on `app_net`.
-3. Env-based Caddy labels stay env-based (no hard-coded domains/secrets).
-4. `APP_PORT` remains the source of truth for container port.
-5. Healthcheck remains present for app.
-6. Persistent data uses `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/...`.
-7. Auth/backup services live in `docker-compose/compose.auth.yml`, not `compose.apps.yml`.
-8. App routes protected by Caddy `forward_auth` to Tinyauth, not Caddy Basic Auth.
-9. If the replacement app uses SQLite, it must integrate with Litestream restore/replicate before app start.
-10. Core/Ops/Auth/Access behavior must not be changed unless explicitly requested.
+1. Service name stays `app` in `compose.apps.yml`.
+2. Container name stays `main-app`.
+3. `app` service stays on network `app_net`.
+4. All Caddy labels use `${ENV_VAR}` expansion — no hard-coded domains, ports, or secrets.
+5. `APP_PORT` is the single source of truth for the container listen port.
+6. `HEALTH_PATH` is used in the app healthcheck — must point to a real working endpoint.
+7. App healthcheck stays: `wget -qO- http://localhost:${APP_PORT}${HEALTH_PATH} || exit 1`.
+8. Persistent data uses `${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/...` bind mounts only.
+9. Tinyauth and Litestream services must remain in `docker-compose/compose.auth.yml`.
+10. App routes must be protected by Caddy `forward_auth` to Tinyauth — never use Caddy Basic Auth.
+11. `depends_on: litestream-restore: condition: service_completed_successfully` AND `tinyauth: condition: service_healthy` must remain in app service.
+12. If app uses SQLite: must integrate Litestream restore gate — app cannot start before it completes.
+13. Core/Ops/Auth/Access behavior must not change unless explicitly requested.
+14. `restart: unless-stopped` must be on all long-running services.
+15. All new services must join `app_net` network.
+
+### Litestream Invariants
+
+16. When app uses SQLite: add the data volume to BOTH `litestream-restore` AND `litestream` in `compose.auth.yml`.
+17. DB path in `litestream.yml` must exactly match the path where the app writes the SQLite file on disk.
+18. Set `LITESTREAM_REPLICATE_DBS=tinyauth,app` when app uses SQLite.
+19. First deploy: `LITESTREAM_INIT_MODE=true`. After first init: set `false` permanently.
+20. NEVER set `LITESTREAM_INIT_MODE=true` when a replica already exists on S3 — the container will exit with error.
+
+### Rclone Invariants
+
+21. Rclone syncs everything under `${DOCKER_VOLUMES_ROOT}` (mounted as `/data` inside the container).
+22. Do NOT place app data volumes outside `${DOCKER_VOLUMES_ROOT}` unless explicitly requested — they will not be synced.
+23. `rclone.conf` (not `rclone.conf.example`) must exist at `services/rclone/rclone.conf`.
+24. `RCLONE_REMOTE_TARGET` format: `<remote_name_in_conf>:<bucket_or_path>`. The remote name must match a `[section]` in `rclone.conf`.
+
+### Tinyauth Invariants
+
+25. `TINYAUTH_USERS` in `.env` uses `$$` (double dollar) to escape bcrypt hashes — dc.sh normalizes them at runtime.
+26. `TINYAUTH_APP_URL` must be the exact public HTTPS URL where tinyauth is accessible (no trailing slash).
+27. These four Caddy `forward_auth` labels MUST all be present on every protected app service:
+    - `caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}`
+    - `caddy.forward_auth.uri=/api/auth/caddy`
+    - `caddy.forward_auth.header_up=X-Forwarded-Proto https`
+    - `caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups`
 
 ## 3) Default Editable Files
 
@@ -44,14 +74,80 @@ Replace only the application layer while preserving Core/Ops/Access logic.
 - `services/rclone/entrypoint.sh` (if rclone sync logic needs adjustment)
 - `docs/services/rclone.md` (for rclone sync documentation updates)
 
-## 4) Required Validation Commands
+## 4) Common Failure Patterns
 
-- `npm run dockerapp-validate:env`
-- `npm run dockerapp-validate:compose`
+**Read this entire section before making any changes.**
+
+### 4a) Litestream
+
+| Symptom | Root Cause | Fix |
+|---------|------------|-----|
+| `INIT_MODE=true but database file already exists` — container exits with error | DB exists but `LITESTREAM_INIT_MODE` still `true` | Set `LITESTREAM_INIT_MODE=false` |
+| App blocked at startup, log: `Replica not found` | `LITESTREAM_INIT_MODE=false` + no S3 replica yet | Set `LITESTREAM_INIT_MODE=true` for first deploy only |
+| Litestream running but app DB not replicated silently | `LITESTREAM_REPLICATE_DBS` doesn't include `app` | Set `LITESTREAM_REPLICATE_DBS=tinyauth,app` |
+| App DB not restored on fresh deploy | Data volume missing in `litestream-restore` service | Add volume to BOTH `litestream-restore` AND `litestream` in `compose.auth.yml` |
+| Restore succeeds but app cannot open DB | Path mismatch between `litestream.yml` and app's actual DB path | Match `path:` in `litestream.yml` exactly to the app's SQLite file path |
+| `litestream-restore` succeeds but app crashes on DB open | Filename in `LITESTREAM_APP_DB_FILE` differs from what the app creates | Align `LITESTREAM_APP_DB_FILE` to the actual filename the app uses |
+
+**Checklist when adding SQLite to app (do ALL before declaring done):**
+
+- [ ] `litestream.yml`: add DB entry with exact container path (e.g. `/data/app/my.db`)
+- [ ] `compose.auth.yml` — `litestream-restore` volumes: add `- ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/data:/data/app`
+- [ ] `compose.auth.yml` — `litestream` volumes: add the same volume entry as above
+- [ ] `.env.example`: add `LITESTREAM_APP_DB_FILE`, `LITESTREAM_APP_S3_PATH`; update `LITESTREAM_REPLICATE_DBS=tinyauth,app`
+- [ ] `services/litestream/entrypoint.sh`: verify `*,app,*` case calls `restore_db "app" "/data/app/${LITESTREAM_APP_DB_FILE:-app.db}"`
+- [ ] `compose.apps.yml` app service: verify `depends_on.litestream-restore.condition: service_completed_successfully`
+
+### 4b) Rclone
+
+| Symptom | Root Cause | Fix |
+|---------|------------|-----|
+| Container exits immediately: `config file not found at /config/rclone/rclone.conf` | `rclone.conf` not created from example | `cp services/rclone/rclone.conf.example services/rclone/rclone.conf` then fill credentials |
+| Sync loop runs but no files transferred | `RCLONE_DRY_RUN=true` | Set `RCLONE_DRY_RUN=false` after verifying with dry-run |
+| `Failed to find remote "<name>"` error in logs | Remote name in `RCLONE_REMOTE_TARGET` doesn't match `[section]` in `rclone.conf` | Use the exact section name, e.g. `remote_store:bucket/path` |
+| App data not being backed up by rclone | App data volume is outside `${DOCKER_VOLUMES_ROOT}` | Keep all app volumes under `${DOCKER_VOLUMES_ROOT}` — rclone only syncs that directory |
+| Authentication / permission error from S3/R2 | Wrong `access_key_id` or `secret_access_key` in `rclone.conf` | Regenerate keys in provider console and update `rclone.conf` |
+
+**Rclone setup order (first time):**
+
+1. `cp services/rclone/rclone.conf.example services/rclone/rclone.conf`
+2. Fill `[remote_store]` section in `rclone.conf` with actual credentials
+3. Set `RCLONE_REMOTE_TARGET=remote_store:<bucket>/docker-volumes` in `.env`
+4. Test: `RCLONE_DRY_RUN=true`, start stack, verify logs show expected file list
+5. Set `RCLONE_DRY_RUN=false` and `ENABLE_RCLONE=true`
+
+### 4c) Tinyauth
+
+| Symptom | Root Cause | Fix |
+|---------|------------|-----|
+| All requests return 401 even with correct password | `TINYAUTH_TRUSTED_PROXIES` doesn't include Docker network ranges | Keep default: `127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` |
+| Cookie rejected on every request (login redirect loop) | `TINYAUTH_COOKIE_SECURE=true` but traffic is plain HTTP | Use HTTPS (Cloudflare tunnel / Tailscale) or set `false` for local HTTP testing only |
+| OAuth redirect fails or goes to wrong URL | `TINYAUTH_APP_URL` doesn't match actual tinyauth public URL | Set to the exact URL (e.g. `https://auth.myapp.dpdns.org`), no trailing slash |
+| App starts before tinyauth is ready (race condition / 503) | Missing `depends_on: tinyauth: condition: service_healthy` in app service | Add to app service in `compose.apps.yml` |
+| Forward auth passes but user headers are empty in app | `copy_headers` label missing or misspelled | Verify: `caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups` |
+| Login accepted but cookie immediately rejected | bcrypt hash uses `$` instead of `$$` in `.env` | Use `$$2a$$10$$...` in `.env` file — dc.sh unescapes to `$` at runtime |
+| Tinyauth healthcheck fails at startup | DB path wrong or volume not mounted | Verify `TINYAUTH_DB_FILE` and that `${DOCKER_VOLUMES_ROOT}/tinyauth` is mounted at `/data` |
+
+### 4d) Caddy Labels
+
+| Symptom | Root Cause | Fix |
+|---------|------------|-----|
+| Second virtual-host on service not routed | Used `caddy2=` instead of `caddy_1=` | Use `caddy_1`, `caddy_2`, `caddy_3`... (underscore + number, not number alone) |
+| SSE / WebSocket streaming breaks or hangs | Missing `flush_interval=-1` | Add `caddy.reverse_proxy.flush_interval=-1` for streaming/SSE apps |
+| Service accessible without auth | `forward_auth` labels missing or incomplete | Verify all four `forward_auth` labels present on every protected service |
+| Port mismatch / connection refused in proxy | Hard-coded port in `{{upstreams}}` | Always use `{{upstreams ${APP_PORT:-3000}}}` — never hard-code |
+| Caddy logs `no upstream` | Service not on `app_net` | Add `networks: [app_net]` to the service |
+
+## 5) Required Validation Commands
+
+```bash
+npm run dockerapp-validate:env
+npm run dockerapp-validate:compose
+```
 
 If validation cannot run, agent must state why.
 
-## 5) Output Contract (Token-Optimized)
+## 6) Output Contract (Token-Optimized)
 
 Agent must return only:
 
@@ -72,15 +168,15 @@ Rules:
 - Keep explanation minimal (only for blockers/assumptions).
 - If only one file changed, return only that one full file block.
 
-## 6) Prompt Template
+## 7) Prompt Template
 
 ```text
 Use AGENT_APP_SWAP.md as the only context source.
 
-Task: Replace service `app` with the spec below, preserving all invariants in AGENT_APP_SWAP.md.
+Task: Replace service `app` with the spec below, preserving all invariants in sections 2 and 4.
 
 APP_SPEC:
-- Runtime: <node|python|go|java|prebuilt-image|other>
+- Runtime: <node|python|go|java|rust|prebuilt-image|other>
 - Delivery: <build|image>
 - Image: <registry/image:tag> (if Delivery=image)
 - Build context: <path> (if Delivery=build)
@@ -96,12 +192,12 @@ Do:
 1) Apply code changes in repo.
 2) Keep Tinyauth `forward_auth` labels in app service unless APP_SPEC says public/custom.
 3) Keep Tinyauth/Litestream services in `docker-compose/compose.auth.yml`.
-4) If app uses SQLite, add Litestream config/env/restore gate before app start.
-5) Run required validation commands.
-6) Return output exactly using the Output Contract in AGENT_APP_SWAP.md.
+4) If app uses SQLite, complete every item in the Litestream checklist (section 4a) before finishing.
+5) Run required validation commands (section 5).
+6) Return output exactly using the Output Contract in section 6.
 ```
 
-## 7) Embedded Project Snapshot (Auto-Generated)
+## 8) Embedded Project Snapshot (Auto-Generated)
 
 Tracked files:
 

@@ -2,7 +2,7 @@
 
 ## Mục đích
 
-Template này dùng khi user clone repo odeploynamemanager thành thư mục mới, rồi nhờ AI Agent triển khai một app mới thay thế `services/app` hiện tại.
+Template này dùng khi user clone repo thành thư mục mới, rồi nhờ AI Agent triển khai một app mới thay thế `services/app` hiện tại.
 Luồng làm việc tuân thủ cấu trúc [task-template.md](task-template.md).
 
 ---
@@ -69,22 +69,15 @@ Luồng làm việc tuân thủ cấu trúc [task-template.md](task-template.md)
 > #   debug  → thêm luồng xử lý nội bộ
 > #   trace  → toàn bộ, rất verbose
 > LOG_LEVEL=info
-> ```
-
+>
 > # Secret key dùng để ký JWT token.
->
 > # Lấy tại: https://your-auth-provider.com/dashboard → Settings → API Keys
->
 > # Hướng dẫn: Đăng nhập → chọn project → Copy "Secret Key"
->
-> # ⚠️ KHÔNG commit giá trị thật lên Git.
->
+> # KHÔNG commit giá trị thật lên Git.
 > MY_APP_SECRET=change-me
->
 > ```
 >
 > Nếu không có ENV mới: ghi `"Không cần thêm ENV mới."`
-> ```
 
 ### Spec 5 — SQLite / Litestream
 
@@ -122,7 +115,7 @@ Agent tự tạo checklist từ các Spec ở trên, rồi đánh dấu khi từ
 
 - [ ] Đọc yêu cầu user và xác định phạm vi thay đổi
 - [ ] Kiểm tra rule bắt buộc trong `AGENTS.md`
-- [ ] Đọc `AGENT_APP_SWAP.md` để nắm invariants (Scope And Invariants, mục 2)
+- [ ] Đọc `AGENT_APP_SWAP.md` — nắm invariants (**section 2**) VÀ common failure patterns (**section 4**)
 - [ ] Xác nhận đủ 6 Spec — nếu thiếu, hỏi user trước khi làm
 
 ### Phase 1 — Chuẩn bị source code
@@ -135,29 +128,48 @@ Agent tự tạo checklist từ các Spec ở trên, rồi đánh dấu khi từ
 ### Phase 2 — Cập nhật compose.apps.yml
 
 - [ ] Sửa `compose.apps.yml` theo Spec 3 (image/build, port, env, volumes, labels, healthcheck)
-- [ ] Giữ đúng invariants từ `AGENT_APP_SWAP.md`:
+- [ ] Giữ đúng invariants từ `AGENT_APP_SWAP.md` section 2:
   - Service name vẫn là `app`
   - Container name vẫn là `main-app`
   - Network vẫn là `app_net`
   - `APP_PORT` là source of truth cho port
-  - Healthcheck phải có
-  - Caddy labels dùng env vars, không hard-code domain
-- [ ] Auth labels: thêm/giữ/bỏ `forward_auth` theo Spec 3
+  - `HEALTH_PATH` dùng trong healthcheck — phải là endpoint thật trả HTTP 200
+  - Healthcheck: `wget -qO- http://localhost:${APP_PORT}${HEALTH_PATH} || exit 1`
+  - Caddy labels dùng env vars, không hard-code domain/port
+  - `restart: unless-stopped` phải có
+  - `depends_on: litestream-restore + tinyauth` phải có
+- [ ] Auth labels: giữ đủ 4 label `forward_auth` theo invariant 27:
+  - `caddy.forward_auth=tinyauth:${TINYAUTH_PORT:-3000}`
+  - `caddy.forward_auth.uri=/api/auth/caddy`
+  - `caddy.forward_auth.header_up=X-Forwarded-Proto https`
+  - `caddy.forward_auth.copy_headers=Remote-User Remote-Email Remote-Name Remote-Groups`
+- [ ] Nếu app dùng SSE/WebSocket: thêm `caddy.reverse_proxy.flush_interval=-1`
+- [ ] Nếu bỏ auth (Spec 3 = public): bỏ `forward_auth` labels, giữ `reverse_proxy` labels
 
 ### Phase 3 — Cập nhật .env.example
 
 - [ ] Thêm ENV mới theo Spec 4 vào section `APPLICATION` trong `.env.example`
+- [ ] Mỗi ENV mới phải có comment rõ ràng: mục đích, giá trị hợp lệ, link lấy giá trị (nếu cần)
 - [ ] Cập nhật `APP_IMAGE`, `APP_PORT`, `HEALTH_PATH` nếu khác mặc định
-- [ ] Xóa ENV cũ không còn dùng (ví dụ: các biến `DPDNS_CLOUDFLARED_MANAGER_*` nếu app mới không dùng)
+- [ ] Xóa ENV cũ không còn dùng
 
-### Phase 4 — SQLite / Litestream (nếu có)
+### Phase 4 — SQLite / Litestream (nếu Spec 5 = có)
 
-- [ ] Cập nhật `services/litestream/litestream.yml` thêm DB mới (theo Spec 5)
-- [ ] Cập nhật `services/litestream/entrypoint.sh` thêm restore gate cho app DB
-- [ ] Cập nhật `docker-compose/compose.auth.yml` — mount volume app data cho litestream containers
-- [ ] Cập nhật `LITESTREAM_REPLICATE_DBS` trong `.env.example`
+**Bắt buộc hoàn thành TẤT CẢ items trong checklist section 4a của AGENT_APP_SWAP.md:**
 
-### Phase 5 — Cập nhật docs & validate
+- [ ] `services/litestream/litestream.yml`: thêm DB entry với exact container path (ví dụ `/data/app/my.db`)
+- [ ] `docker-compose/compose.auth.yml` — service `litestream-restore` volumes: thêm `- ${DOCKER_VOLUMES_ROOT:-./.docker-volumes}/app/data:/data/app`
+- [ ] `docker-compose/compose.auth.yml` — service `litestream` volumes: thêm cùng volume entry như trên
+- [ ] `.env.example`: thêm `LITESTREAM_APP_DB_FILE`, `LITESTREAM_APP_S3_PATH`; update `LITESTREAM_REPLICATE_DBS=tinyauth,app`
+- [ ] `services/litestream/entrypoint.sh`: xác nhận có case `*,app,*` gọi `restore_db "app" "/data/app/${LITESTREAM_APP_DB_FILE:-app.db}"`
+- [ ] `compose.apps.yml`: xác nhận `depends_on.litestream-restore.condition: service_completed_successfully`
+
+### Phase 5 — Rclone compatibility check
+
+- [ ] Xác nhận tất cả app data volumes nằm dưới `${DOCKER_VOLUMES_ROOT}` (nếu không → rclone sẽ KHÔNG backup)
+- [ ] Nếu app tạo volumes mới ngoài `${DOCKER_VOLUMES_ROOT}` → di chuyển vào hoặc ghi chú rõ ràng
+
+### Phase 6 — Cập nhật docs & validate
 
 - [ ] Cập nhật `docs/services/app.md` mô tả app mới
 - [ ] Cập nhật `docs/services/litestream.md` nếu có thay đổi Litestream
@@ -165,9 +177,10 @@ Agent tự tạo checklist từ các Spec ở trên, rồi đánh dấu khi từ
 - [ ] Chạy `npm run dockerapp-validate:compose`
 - [ ] Cập nhật `docker-compose/scripts/validate-env.js` nếu có ENV mới cần validate
 
-### Phase 6 — Hoàn tất
+### Phase 7 — Hoàn tất
 
 - [ ] Kiểm tra lại toàn bộ thay đổi phù hợp yêu cầu
+- [ ] Đối chiếu lại tất cả failure patterns trong `AGENT_APP_SWAP.md` section 4 — đảm bảo không rơi vào pattern nào
 - [ ] Cập nhật `.opushforce.message` đúng format trong `AGENTS.md`
 - [ ] Trả lời user ngắn gọn kèm danh sách file đã chỉnh
 
@@ -175,21 +188,25 @@ Agent tự tạo checklist từ các Spec ở trên, rồi đánh dấu khi từ
 
 ## File liên quan — Danh sách file mà Agent có thể đọc/chỉnh
 
-Tham chiếu từ `AGENT_APP_SWAP.md` mục 3 (Default Editable Files):
+Tham chiếu từ `AGENT_APP_SWAP.md` section 3 (Default Editable Files):
 
-| File                                     | Hành động                 | Ghi chú                      |
-| ---------------------------------------- | ------------------------- | ---------------------------- |
-| `services/app/**`                        | Xóa cũ + thay source mới  | Thư mục chính của app        |
-| `services/app/Dockerfile`                | Tạo mới / sửa             | Dockerfile phù hợp runtime   |
-| `compose.apps.yml`                       | Sửa                       | Service `app` definition     |
-| `.env.example`                           | Sửa                       | Thêm/sửa ENV mới             |
-| `docker-compose/compose.auth.yml`        | Sửa (nếu cần)             | Litestream volumes, Tinyauth |
-| `services/litestream/litestream.yml`     | Sửa (nếu app dùng SQLite) | Thêm DB replica config       |
-| `services/litestream/entrypoint.sh`      | Sửa (nếu app dùng SQLite) | Restore gate                 |
-| `docker-compose/scripts/validate-env.js` | Sửa (nếu ENV mới)         | Validation rules             |
-| `docs/services/app.md`                   | Sửa                       | Tài liệu app mới             |
-| `docs/services/litestream.md`            | Sửa (nếu cần)             | Tài liệu Litestream          |
-| `docs/services/tinyauth.md`              | Sửa (nếu auth thay đổi)   | Tài liệu Tinyauth            |
+| File                                     | Hành động                 | Ghi chú                        |
+| ---------------------------------------- | ------------------------- | ------------------------------ |
+| `services/app/**`                        | Xóa cũ + thay source mới  | Thư mục chính của app          |
+| `services/app/Dockerfile`                | Tạo mới / sửa             | Dockerfile phù hợp runtime     |
+| `compose.apps.yml`                       | Sửa                       | Service `app` definition       |
+| `.env.example`                           | Sửa                       | Thêm/sửa ENV mới               |
+| `docker-compose/compose.auth.yml`        | Sửa (nếu cần)             | Litestream volumes, Tinyauth   |
+| `services/litestream/litestream.yml`     | Sửa (nếu app dùng SQLite) | Thêm DB replica config         |
+| `services/litestream/entrypoint.sh`      | Sửa (nếu app dùng SQLite) | Restore gate                   |
+| `docker-compose/scripts/validate-env.js` | Sửa (nếu ENV mới)         | Validation rules               |
+| `docker-compose/compose.rclone.yml`      | Sửa (nếu cần)             | Rclone sync config             |
+| `services/rclone/rclone.conf.example`    | Sửa (nếu remote thay đổi) | Remote storage template        |
+| `services/rclone/entrypoint.sh`          | Sửa (nếu sync logic đổi)  | Rclone sync loop script        |
+| `docs/services/app.md`                   | Sửa                       | Tài liệu app mới               |
+| `docs/services/litestream.md`            | Sửa (nếu cần)             | Tài liệu Litestream            |
+| `docs/services/tinyauth.md`             | Sửa (nếu auth thay đổi)   | Tài liệu Tinyauth              |
+| `docs/services/rclone.md`               | Sửa (nếu cần)             | Tài liệu Rclone                |
 
 Agent cập nhật thêm file đã đọc/chỉnh vào đây:
 
