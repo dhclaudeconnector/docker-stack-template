@@ -186,6 +186,7 @@ bash docker-compose/scripts/dc.sh logs -f rclone-sync
 |------------|-------------|-----------|
 | `rclone-init` exit 1, "RCLONE_CONFIG_BASE64 chưa được set" | Quên paste base64 vào `.env` | Encode `rclone.conf` rồi paste |
 | `rclone-init` exit 1, "Decode … thất bại" | Chuỗi base64 bị xuống dòng / có ký tự lạ | Encode lại bằng `base64 -w 0` (không wrap) |
+| `rclone-init` exit 1, `Invalid value when setting --bwlimit ... RCLONE_BWLIMIT=""` | Compose cũ inject toàn bộ `.env`, làm rclone tự parse biến tùy chọn rỗng | Cập nhật `compose.rclone.yml`; bản mới chỉ forward biến nội bộ `STACK_RCLONE_*` |
 | `rclone-restore` exit 1, "không kết nối được remote" | Sai endpoint / credentials / bucket chưa tồn tại | Kiểm tra section `[remote_store]` và provider |
 | App start nhưng data trống sau restart | `ENABLE_RCLONE=false` → gate file không nạp | Bật `ENABLE_RCLONE=true` |
 | Sync chậm | Mạng / S3 throttling | Giảm `RCLONE_TRANSFERS`, đặt `RCLONE_BWLIMIT` |

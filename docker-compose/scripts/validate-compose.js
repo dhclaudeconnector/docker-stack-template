@@ -16,6 +16,7 @@ const FILES = [
   'docker-compose/compose.ops.yml',
   'docker-compose/compose.access.yml',
   'docker-compose/compose.deploy.yml',
+  'docker-compose/compose.rclone.yml',
   'compose.apps.yml',
 ];
 
@@ -46,15 +47,20 @@ function profileArgsFromEnv(env) {
   if (env.ENABLE_TAILSCALE === 'true') profiles.push(isWindows ? 'tailscale-windows' : 'tailscale-linux');
   if (env.ENABLE_LITESTREAM !== 'false') profiles.push('litestream');
   if (env.DOCKER_DEPLOY_CODE_ENABLED === 'true') profiles.push('deploy-code');
+  if (env.ENABLE_RCLONE === 'true') profiles.push('rclone');
 
   return profiles.flatMap((profile) => ['--profile', profile]);
 }
 
 console.log('\n🐳  Compose Config Validation\n');
 
+const env = parseEnvFile('.env');
+const files = [...FILES];
+if (env.ENABLE_RCLONE === 'true') files.push('docker-compose/compose.rclone-gate.yml');
+
 // Check all files exist
 let abort = false;
-for (const f of FILES) {
+for (const f of files) {
   if (!fs.existsSync(f)) {
     console.error(`❌  ${f} not found`);
     abort = true;
@@ -64,11 +70,11 @@ for (const f of FILES) {
 }
 if (abort) process.exit(1);
 
-const fileArgs = FILES.map(f => `-f ${f}`).join(' ');
-const profileArgs = profileArgsFromEnv(parseEnvFile('.env'));
+const fileArgs = files.map(f => `-f ${f}`).join(' ');
+const profileArgs = profileArgsFromEnv(env);
 const args = [
   'compose',
-  ...FILES.flatMap((f) => ['-f', f]),
+  ...files.flatMap((f) => ['-f', f]),
   ...profileArgs,
   '--project-directory',
   process.cwd(),

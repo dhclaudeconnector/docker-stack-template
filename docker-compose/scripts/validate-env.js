@@ -134,9 +134,33 @@ function normalizeDockerEscapedDollar(v) {
   return String(v || "").replace(/\$\$/g, "$");
 }
 
+function decodeRcloneConfigBase64(v) {
+  const cleaned = String(v || "").replace(/\s/g, "");
+  if (!cleaned || cleaned.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)) {
+    return { error: "must be valid base64" };
+  }
+  try {
+    const config = Buffer.from(cleaned, "base64").toString("utf8");
+    const remotes = [...config.matchAll(/^\s*\[([^\]\r\n]+)\]\s*$/gm)].map((match) => match[1].trim());
+    if (!remotes.length) return { error: "decoded config must contain at least one [remote] section" };
+    return { config, remotes };
+  } catch {
+    return { error: "must be valid base64" };
+  }
+}
+
+function parseRcloneRemoteTarget(v) {
+  const idx = String(v || "").indexOf(":");
+  if (idx <= 0) return { error: "must use <remote_name>:<bucket_or_path> format" };
+  return { remote: v.slice(0, idx) };
+}
+
 const TINYAUTH_EXAMPLE_BCRYPT_HASH = "$2a$10$UdLYoJ5lgPsC0RKqYH/jMua7zIn0g9kPqWmhYayJYLaZQ/FTmH2/u";
 
 function validateTinyauthUsers(v) {
+  if (/(^|[^$])\$(?!\$)/.test(v)) {
+    return "bcrypt dollars must be escaped as $$ for Docker Compose";
+  }
   const users = v.split(",").map((part) => part.trim()).filter(Boolean);
   if (!users.length) return "must contain at least one user";
 
@@ -298,7 +322,7 @@ if (env.DOCKER_DEPLOY_CODE_ENABLED === "true") {
 }
 
 // 3) Flags
-for (const key of ["ENABLE_DOZZLE", "ENABLE_FILEBROWSER", "ENABLE_WEBSSH", "ENABLE_TAILSCALE", "ENABLE_LITESTREAM", "DOCKER_DEPLOY_CODE_ENABLED", "DOCKER_DEPLOY_CODE_POLL_ENABLED", "DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE", "DOCKER_DEPLOY_CODE_RUN_ON_START", "DOCKER_DEPLOY_CODE_REQUIRE_TOKEN", "DOCKER_DEPLOY_CODE_GIT_CLEAN", "DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL", "DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING", "DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY", "DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY"]) {
+for (const key of ["ENABLE_DOZZLE", "ENABLE_FILEBROWSER", "ENABLE_WEBSSH", "ENABLE_TAILSCALE", "ENABLE_LITESTREAM", "ENABLE_RCLONE", "DOCKER_DEPLOY_CODE_ENABLED", "DOCKER_DEPLOY_CODE_POLL_ENABLED", "DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE", "DOCKER_DEPLOY_CODE_RUN_ON_START", "DOCKER_DEPLOY_CODE_REQUIRE_TOKEN", "DOCKER_DEPLOY_CODE_GIT_CLEAN", "DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL", "DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING", "DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY", "DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY"]) {
   const v = env[key];
   if (!v) {
     warnings.push(`${key} not set -> using default from scripts/compose`);
@@ -306,6 +330,21 @@ for (const key of ["ENABLE_DOZZLE", "ENABLE_FILEBROWSER", "ENABLE_WEBSSH", "ENAB
   }
   if (!isBool(v)) errors.push(`${key} must be true|false`);
   else ok.push(`${key}=${v}`);
+}
+
+if ((env.ENABLE_RCLONE || "false") === "true") {
+  checkRequired("RCLONE_CONFIG_BASE64", "base64-encoded rclone.conf", (v) => decodeRcloneConfigBase64(v).error || null);
+  checkRequired("RCLONE_REMOTE_TARGET", "<remote_name>:<bucket_or_path>", (v) => parseRcloneRemoteTarget(v).error || null);
+
+  const config = decodeRcloneConfigBase64(env.RCLONE_CONFIG_BASE64);
+  const target = parseRcloneRemoteTarget(env.RCLONE_REMOTE_TARGET);
+  if (!config.error && !target.error) {
+    if (!config.remotes.includes(target.remote)) {
+      errors.push(`RCLONE_REMOTE_TARGET remote "${target.remote}" not found in decoded rclone.conf sections: ${config.remotes.join(", ")}`);
+    } else {
+      ok.push(`RCLONE_REMOTE_TARGET remote=${target.remote}`);
+    }
+  }
 }
 
 if ((env.ENABLE_LITESTREAM || "true") === "true") {

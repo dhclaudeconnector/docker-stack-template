@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dockerapp-validate:👇👇👇👇👇": "==dockerapp-validate==",
-    "dockerapp-validate:env": "node docker-compose/scripts/validate-env.js && node H:/nodejs-tester/docker-stack-template/.vscode/hide-panel.js",
+    "dockerapp-validate:env": "node docker-compose/scripts/validate-env.js",
     "dockerapp-validate:compose": "node docker-compose/scripts/validate-compose.js",
     "dockerapp-validate:ts": "node docker-compose/scripts/validate-ts.js",
     "dockerapp-validate:all": "npm run dockerapp-validate:env && npm run dockerapp-validate:compose && npm run dockerapp-validate:ts",
