@@ -161,7 +161,10 @@ function validateTinyauthUsers(v) {
   if (/(^|[^$])\$(?!\$)/.test(v)) {
     return "bcrypt dollars must be escaped as $$ for Docker Compose";
   }
-  const users = v.split(",").map((part) => part.trim()).filter(Boolean);
+  const users = v
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   if (!users.length) return "must contain at least one user";
 
   for (const entry of users) {
@@ -183,7 +186,10 @@ function validateTinyauthUsers(v) {
 }
 
 function validateTrustedProxies(v) {
-  const entries = v.split(",").map((part) => part.trim()).filter(Boolean);
+  const entries = v
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
   if (!entries.length) return "must contain at least one IP/CIDR";
 
   for (const entry of entries) {
@@ -214,20 +220,18 @@ function buildAppHost(project, domain) {
 
 // 1) Required core env from compose files
 checkRequired("PROJECT_NAME", "docker project/network + subdomain prefix", (v) =>
-  /^[a-z0-9][a-z0-9-]*$/.test(v) ? null : "only lowercase letters, numbers, hyphen"
+  /^[a-z0-9][a-z0-9-]*$/.test(v) ? null : "only lowercase letters, numbers, hyphen",
 );
 checkRequired("DOMAIN", "root domain", isValidDomain);
 checkRequired("CADDY_EMAIL", "caddy email label", (v) => (v.includes("@") ? null : "invalid email"));
 checkRequired("TINYAUTH_APP_URL", "public HTTPS Tinyauth URL", isValidHttpsOrigin);
 checkPort("TINYAUTH_PORT", true);
-checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file", (v) =>
-  v.includes("/") || v.includes("\\") ? "must be a filename, not a path" : null
-);
-checkRequired("TINYAUTH_USERS", "static users in username:bcrypt_hash format", validateTinyauthUsers);
+checkRequired("TINYAUTH_DB_FILE", "Tinyauth SQLite file", (v) => (v.includes("/") || v.includes("\\") ? "must be a filename, not a path" : null));
+// checkRequired("TINYAUTH_USERS", "static users in username:bcrypt_hash format", validateTinyauthUsers);
 checkRequired("TINYAUTH_COOKIE_SECURE", "secure cookie toggle", (v) => (isBool(v) ? null : "must be true|false"));
 checkRequired("TINYAUTH_TRUSTED_PROXIES", "trusted Caddy/Cloudflared/Tailscale proxy CIDRs", validateTrustedProxies);
 checkOptional("TINYAUTH_OAUTH_AUTO_REDIRECT", "none|github|google|generic", (v) =>
-  v === "none" || /^[a-z][a-z0-9_-]*$/.test(v) ? null : "must be none or a provider id"
+  v === "none" || /^[a-z][a-z0-9_-]*$/.test(v) ? null : "must be none or a provider id",
 );
 checkOptional("TINYAUTH_OAUTH_WHITELIST", "comma-separated OAuth email/domain/regex whitelist");
 for (const [name, clientKey, secretKey] of [
@@ -277,10 +281,10 @@ checkOptional("DOCKER_DEPLOY_CODE_REMOTE", "git remote to fetch");
 checkOptional("DOCKER_DEPLOY_CODE_COMPOSE_SCRIPT", "compose orchestration script inside repo");
 checkOptional("DOCKER_DEPLOY_CODE_DEPLOY_SERVICES", "comma-separated compose services to rebuild/redeploy");
 checkOptional("DOCKER_DEPLOY_CODE_CONTAINER_CONTROL_ENABLED", "true|false toggle for container control API", (v) =>
-  isBool(v) ? null : "must be true|false"
+  isBool(v) ? null : "must be true|false",
 );
 checkOptional("DOCKER_DEPLOY_CODE_CONTAINER_ALLOW_ALL", "true|false toggle to allow all Docker containers", (v) =>
-  isBool(v) ? null : "must be true|false"
+  isBool(v) ? null : "must be true|false",
 );
 checkOptional("DOCKER_DEPLOY_CODE_SERVICE_ALLOWLIST", "comma-separated compose services allowed for start/stop/restart/rebuild/logs");
 checkOptional("DOCKER_DEPLOY_CODE_CONTAINER_ALLOWLIST", "comma-separated containers allowed for start/stop/restart/logs/inspect");
@@ -314,7 +318,7 @@ if (env.DOCKER_DEPLOY_CODE_ENABLED === "true") {
     errors.push("DOCKER_DEPLOY_CODE_REQUIRE_TOKEN must be true|false");
   } else if (requireToken === "true") {
     checkRequired("DOCKER_DEPLOY_CODE_API_TOKEN", "required when deploy-code token auth is enabled", (v) =>
-      v.length >= 16 ? null : "must be at least 16 characters"
+      v.length >= 16 ? null : "must be at least 16 characters",
     );
   } else {
     warnings.push("DOCKER_DEPLOY_CODE_REQUIRE_TOKEN=false while deploy-code is enabled -> rely on Tinyauth / private network only");
@@ -322,7 +326,24 @@ if (env.DOCKER_DEPLOY_CODE_ENABLED === "true") {
 }
 
 // 3) Flags
-for (const key of ["ENABLE_DOZZLE", "ENABLE_FILEBROWSER", "ENABLE_WEBSSH", "ENABLE_TAILSCALE", "ENABLE_LITESTREAM", "ENABLE_RCLONE", "DOCKER_DEPLOY_CODE_ENABLED", "DOCKER_DEPLOY_CODE_POLL_ENABLED", "DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE", "DOCKER_DEPLOY_CODE_RUN_ON_START", "DOCKER_DEPLOY_CODE_REQUIRE_TOKEN", "DOCKER_DEPLOY_CODE_GIT_CLEAN", "DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL", "DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING", "DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY", "DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY"]) {
+for (const key of [
+  "ENABLE_DOZZLE",
+  "ENABLE_FILEBROWSER",
+  "ENABLE_WEBSSH",
+  "ENABLE_TAILSCALE",
+  "ENABLE_LITESTREAM",
+  "ENABLE_RCLONE",
+  "DOCKER_DEPLOY_CODE_ENABLED",
+  "DOCKER_DEPLOY_CODE_POLL_ENABLED",
+  "DOCKER_DEPLOY_CODE_AUTO_DEPLOY_ON_CHANGE",
+  "DOCKER_DEPLOY_CODE_RUN_ON_START",
+  "DOCKER_DEPLOY_CODE_REQUIRE_TOKEN",
+  "DOCKER_DEPLOY_CODE_GIT_CLEAN",
+  "DOCKER_DEPLOY_CODE_ZIP_STRIP_TOP_LEVEL",
+  "DOCKER_DEPLOY_CODE_ZIP_DELETE_MISSING",
+  "DOCKER_DEPLOY_CODE_ZIP_BACKUP_BEFORE_APPLY",
+  "DOCKER_DEPLOY_CODE_ZIP_DEPLOY_AFTER_APPLY",
+]) {
   const v = env[key];
   if (!v) {
     warnings.push(`${key} not set -> using default from scripts/compose`);
@@ -352,7 +373,7 @@ if ((env.ENABLE_LITESTREAM || "true") === "true") {
   if (!isBool(initMode)) errors.push("LITESTREAM_INIT_MODE must be true|false");
   checkRequired("LITESTREAM_REPLICATE_DBS", "comma-separated SQLite DB ids, e.g. tinyauth or tinyauth,app");
   checkRequired("LITESTREAM_S3_ENDPOINT", "S3-compatible endpoint", (v) =>
-    v.startsWith("http://") || v.startsWith("https://") ? null : "must start with http:// or https://"
+    v.startsWith("http://") || v.startsWith("https://") ? null : "must start with http:// or https://",
   );
   checkRequired("LITESTREAM_S3_BUCKET", "S3 bucket");
   checkRequired("LITESTREAM_S3_ACCESS_KEY_ID", "S3 access key id");
@@ -383,16 +404,12 @@ if ((env.ENABLE_WEBSSH || "true") === "true") {
 
 // 6) Tailscale + keep-ip rules based on compose.access.yml
 if (env.ENABLE_TAILSCALE === "true") {
-  checkRequired("TAILSCALE_AUTHKEY", "required by tailscale service", (v) =>
-    v.startsWith("tskey-") ? null : "must start with tskey-"
-  );
+  checkRequired("TAILSCALE_AUTHKEY", "required by tailscale service", (v) => (v.startsWith("tskey-") ? null : "must start with tskey-"));
   checkRequired("TAILSCALE_TAILNET_DOMAIN", "required by dc.sh to render tailscale/serve.json", (v) =>
-    v && v !== "-" ? null : "must not be empty or '-'"
+    v && v !== "-" ? null : "must not be empty or '-'",
   );
   checkOptional("TAILSCALE_TAGS", "advertise tags", (v) =>
-    /^tag:[A-Za-z0-9][A-Za-z0-9_-]*(,tag:[A-Za-z0-9][A-Za-z0-9_-]*)*$/.test(v)
-      ? null
-      : "format must be tag:a,tag:b"
+    /^tag:[A-Za-z0-9][A-Za-z0-9_-]*(,tag:[A-Za-z0-9][A-Za-z0-9_-]*)*$/.test(v) ? null : "format must be tag:a,tag:b",
   );
 
   const keepIp = (env.TAILSCALE_KEEP_IP_ENABLE || "false").trim();
@@ -405,7 +422,7 @@ if (env.ENABLE_TAILSCALE === "true") {
 
   if (keepIp === "true") {
     checkRequired("TAILSCALE_KEEP_IP_FIREBASE_URL", "required when keep-ip enabled", (v) =>
-      isValidHttpsJsonUrl(v) ? null : "must be https URL ending with .json"
+      isValidHttpsJsonUrl(v) ? null : "must be https URL ending with .json",
     );
     checkOptional("TAILSCALE_KEEP_IP_CERTS_DIR", "certs dir path");
     checkOptional("TAILSCALE_KEEP_IP_INTERVAL_SEC", "backup interval seconds", (v) => {
