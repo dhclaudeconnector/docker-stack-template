@@ -58,6 +58,7 @@
     "env-cloudflared-create": "dotenvrtdb -e .env -- ocli cloudflared",
     "tailscale-init": "node tailscale/tailscale-init.js .env",
     "ocli-gh": "dotenvrtdb -e .env -- ocli gh",
+    "ocli-azure": "dotenvrtdb -e .env -- ocli azure",
     "env-push": "dotenvrtdb -e .env --push -eUrl=$env:DOTENVRTDB_URL"
   }
 }
