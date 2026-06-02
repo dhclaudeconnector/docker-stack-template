@@ -45,8 +45,6 @@ services:
       - "caddy_1.reverse_proxy={{upstreams ${APP_PORT:-3000}}}"
     networks: [app_net]
     depends_on:
-      litestream-restore:
-        condition: service_completed_successfully
       tinyauth:
         condition: service_healthy
     restart: unless-stopped
