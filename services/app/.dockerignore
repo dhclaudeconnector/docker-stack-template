@@ -1,0 +1,8 @@
+# Loại các file không cần trong build context → context nhỏ, build nhanh,
+# và tránh phá cache layer COPY khi các file này thay đổi.
+node_modules/
+npm-debug.log
+.env
+.env.*
+*.log
+.DS_Store

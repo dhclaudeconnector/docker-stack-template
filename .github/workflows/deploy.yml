@@ -39,6 +39,9 @@ env:
   DOTENVRTDB_URL: ${{ secrets.DOTENVRTDB_URL }}
   STOP_RUNNER_ID: "${{ github.run_id }}-${{ github.run_attempt }}"
   STOP_LISTENER_ENABLED: "true"
+  # Bật BuildKit + Compose CLI build để ci-build.sh dùng được buildx cache.
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
 
 jobs:
   deploy:

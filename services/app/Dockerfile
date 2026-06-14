@@ -1,18 +1,37 @@
+# syntax=docker/dockerfile:1.7
+# ================================================================
+#  services/app/Dockerfile — Sample Node app (generic template)
+#
+#  Layer được sắp xếp theo nguyên tắc "ổn định trước, hay đổi sau"
+#  để TỐI ĐA HÓA cache hit khi build lại:
+#    1. Base image + tạo user (gần như không bao giờ đổi)
+#    2. Cài dependency (chỉ rebuild khi package*.json đổi)
+#    3. Copy source code (đổi thường xuyên nhất → để CUỐI)
+#
+#  Dùng kèm BuildKit cache (xem docker-compose/scripts/ci-build.sh):
+#    --mount=type=cache giúp tái dùng ~/.npm giữa các lần build.
+#
+#  Dự án con thay app: đổi base image / lệnh cài deps / CMD cho phù hợp,
+#  nhưng GIỮ NGUYÊN thứ tự layer để không mất cache.
+# ================================================================
 FROM node:20-alpine
 
-# Tạo user không phải root để bảo mật
+# ── Layer ổn định: user không phải root để bảo mật ──────────────
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy package files trước để tận dụng Docker cache
+# ── Layer dependency: copy manifest TRƯỚC, cài deps ─────────────
+# Chỉ rebuild layer này khi package*.json thay đổi → cache hit cao.
+# Cache mount /root/.npm tái dùng package đã tải giữa các lần build.
 COPY package*.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --omit=dev
 
-# Copy source code
+# ── Layer source code: copy sau cùng (đổi nhiều nhất) ───────────
 COPY . .
 
-# Tạo thư mục log và phân quyền
+# Tạo thư mục log và phân quyền.
 RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
 
 USER appuser

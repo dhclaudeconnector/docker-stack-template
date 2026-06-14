@@ -355,15 +355,45 @@ for (const key of [
 
 if ((env.ENABLE_RCLONE || "false") === "true") {
   checkRequired("RCLONE_CONFIG_BASE64", "base64-encoded rclone.conf", (v) => decodeRcloneConfigBase64(v).error || null);
-  checkRequired("RCLONE_REMOTE_TARGET", "<remote_name>:<bucket_or_path>", (v) => parseRcloneRemoteTarget(v).error || null);
 
   const config = decodeRcloneConfigBase64(env.RCLONE_CONFIG_BASE64);
-  const target = parseRcloneRemoteTarget(env.RCLONE_REMOTE_TARGET);
-  if (!config.error && !target.error) {
-    if (!config.remotes.includes(target.remote)) {
-      errors.push(`RCLONE_REMOTE_TARGET remote "${target.remote}" not found in decoded rclone.conf sections: ${config.remotes.join(", ")}`);
+
+  // ── Multi-path: thu thập RCLONE_PATH_N_* (N=1..10) ────────────
+  // Mỗi path cần CẢ _LOCAL và _REMOTE. Đây là cấu hình generic, dự án con
+  // khai báo bao nhiêu path tuỳ ý.
+  const RCLONE_MAX_PATHS = 10;
+  const rclonePaths = [];
+  for (let n = 1; n <= RCLONE_MAX_PATHS; n++) {
+    const local = (env[`RCLONE_PATH_${n}_LOCAL`] || "").trim();
+    const remote = (env[`RCLONE_PATH_${n}_REMOTE`] || "").trim();
+    if (local && remote) rclonePaths.push({ n, local, remote });
+  }
+
+  // Kiểm tra remote của từng path có format đúng + tồn tại trong config.
+  const validateRemoteAgainstConfig = (label, remoteTarget) => {
+    const target = parseRcloneRemoteTarget(remoteTarget);
+    if (target.error) {
+      errors.push(`${label} ${target.error}`);
+      return;
+    }
+    if (!config.error && !config.remotes.includes(target.remote)) {
+      errors.push(`${label} remote "${target.remote}" not found in decoded rclone.conf sections: ${config.remotes.join(", ")}`);
     } else {
-      ok.push(`RCLONE_REMOTE_TARGET remote=${target.remote}`);
+      ok.push(`${label} remote=${target.remote}`);
+    }
+  };
+
+  if (rclonePaths.length > 0) {
+    // Chế độ multi-path: validate từng path, KHÔNG yêu cầu RCLONE_REMOTE_TARGET.
+    ok.push(`RCLONE multi-path mode: ${rclonePaths.length} path(s)`);
+    for (const p of rclonePaths) {
+      validateRemoteAgainstConfig(`RCLONE_PATH_${p.n}_REMOTE`, p.remote);
+    }
+  } else {
+    // Fallback 1-path: bắt buộc RCLONE_REMOTE_TARGET như hành vi cũ.
+    checkRequired("RCLONE_REMOTE_TARGET", "<remote_name>:<bucket_or_path> (hoặc khai báo RCLONE_PATH_1_*)", (v) => parseRcloneRemoteTarget(v).error || null);
+    if (env.RCLONE_REMOTE_TARGET) {
+      validateRemoteAgainstConfig("RCLONE_REMOTE_TARGET", env.RCLONE_REMOTE_TARGET);
     }
   }
 }

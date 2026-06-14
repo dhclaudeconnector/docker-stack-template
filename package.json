@@ -19,6 +19,7 @@
     "dockerapp-gen:caddy-hash": "docker run --rm caddy:alpine caddy hash-password --plaintext",
     "dockerapp-exec:👇👇👇👇👇": "==dockerapp-exec==",
     "dockerapp-exec:up": "bash docker-compose/scripts/dc.sh up -d --build --remove-orphans",
+    "dockerapp-exec:ci-build": "bash docker-compose/scripts/ci-build.sh",
     "dockerapp-exec:up:fresh": "bash docker-compose/scripts/dc.sh down -v && bash docker-compose/scripts/dc.sh up -d --build --remove-orphans",
     "dockerapp-exec:down": "bash docker-compose/scripts/dc.sh down",
     "dockerapp-exec:down:volumes": "bash docker-compose/scripts/dc.sh down -v",

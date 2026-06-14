@@ -29,13 +29,41 @@ runs:
       shell: bash
       run: dotenvrtdb -e .env -- node docker-compose/scripts/validate-env.js
 
-    # ── Step 5: Deploy via dc.sh ──────────────────────────────
-    - name: Build & start services (Linux)
+    # ── Linux: BuildKit gha cache + public-image cache + deploy ─
+    # Build từng service với BuildKit cache (type=gha) qua ci-build.sh,
+    # rồi `compose up --no-build`. Nhanh hơn `up --build` vì tái dùng layer
+    # giữa các lần chạy CI.
+    - name: Expose GitHub Actions runtime (for gha build cache)
+      if: runner.os == 'Linux'
+      uses: crazy-max/ghaction-github-runtime@v3
+
+    - name: Set up Docker Buildx
+      if: runner.os == 'Linux'
+      uses: docker/setup-buildx-action@v3
+
+    - name: Compute weekly image cache key
+      if: runner.os == 'Linux'
+      id: imgkey
+      shell: bash
+      run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache public docker images (save/load tarball)
+      if: runner.os == 'Linux'
+      uses: actions/cache@v4
+      with:
+        path: /tmp/ci-public-images.tar
+        # Key đổi theo TUẦN → tự refresh image công khai mỗi tuần.
+        key: docker-pubimg-v1-${{ steps.imgkey.outputs.week }}
+
+    - name: Build images (cache) & deploy stack (Linux)
       if: runner.os == 'Linux'
       shell: bash
-      run: |
-        bash docker-compose/scripts/dc.sh up -d --build --remove-orphans
+      env:
+        CACHE_TYPE: gha
+        IMAGE_TAR: /tmp/ci-public-images.tar
+      run: dotenvrtdb -e .env -- bash docker-compose/scripts/ci-build.sh
 
+    # ── Windows: giữ nguyên (build qua compose, không cache) ──
     - name: Build & start services (Windows/WSL2)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -43,18 +71,19 @@ runs:
         $wsl = $env:WSL_WORKSPACE
         wsl -d Ubuntu -- bash -c "cd '$wsl' && bash docker-compose/scripts/dc.sh up -d --build --remove-orphans"
 
-    # ── Step 6: Cleanup + keepalive ───────────────────────────
-    - name: Clean up unused images (Linux)
+    # ── Cleanup + keepalive ───────────────────────────────────
+    # Chỉ prune image cũ hơn 72h → giữ lại layer gần đây cho cache hit.
+    - name: Clean up old images (Linux)
       if: runner.os == 'Linux'
       shell: bash
-      run: docker image prune -f
+      run: docker image prune -f --filter "until=72h"
 
-    - name: Clean up unused images (Windows/WSL2)
+    - name: Clean up old images (Windows/WSL2)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         $wsl = $env:WSL_WORKSPACE
-        wsl -d Ubuntu -- bash -c "cd '$wsl' && sudo docker image prune -f"
+        wsl -d Ubuntu -- bash -c "cd '$wsl' && sudo docker image prune -f --filter 'until=72h'"
 
     - name: dotenvrtdb runner keepalive
       shell: bash
